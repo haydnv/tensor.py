@@ -18,7 +18,20 @@ def test_setitem():
 
     assert (sparse.to_dense() == dense).all()
 
+
+def test_getitem():
+    dims = [5, 3, 1, 10]
+    sparse = SparseTensor(dims)
+    dense = np.zeros(dims)
+
+    for coord in [(3, 1, 0, 9)]:
+        sparse[coord] = 1
+        dense[coord] = 1
+        assert (sparse.to_dense() == dense).all()
+
+
 if __name__ == "__main__":
     test_setitem()
+    test_getitem()
     print("PASS")
 

@@ -16,6 +16,22 @@ class SparseTensor(object):
         for i in range(self.ndim):
             self._table.add_index(str(i), [i])
 
+    def __getitem__(self, coord):
+        if len(coord) > self.ndim:
+            raise IndexError
+
+        if any([abs(coord[i]) > self.shape[i] for i in range(len(coord))]):
+            raise IndexError
+
+        if len(coord) == self.ndim and all(isinstance(c, int) for c in coord):
+            selector = dict(zip(range(len(coord)), coord))
+            for value in self._table.slice(selector):
+                return value
+
+            return 0
+
+        raise NotImplementedError
+
     def __setitem__(self, coord, value):
         value = self.dtype(value)
 
@@ -69,38 +85,4 @@ class SparseTensor(object):
             dense[coord] = value
 
         return dense
-
-    def _selection_shape(self, coord):
-        if len(coord) > self.ndim:
-            raise IndexError
-
-        if len(coord) == self.ndim and all([isinstance(c, int) for c in coord]):
-            if any(abs(coord[i]) >= self.shape[i] for i in range(self.ndim)):
-                raise IndexError
-
-            return 1
-
-        selection_shape = []
-        for i in len(coord):
-            if coord[i] is None:
-                selection_shape.append(self.shape[i])
-            elif isinstance(coord[i], slice):
-                if coord[i].start is None:
-                    start = 0
-                elif coord[i].start > 0:
-                    start = coord[i].start
-                else:
-                    start = self.shape[i] + coord[i].start
-
-                if coord[i].end is None:
-                    end = self.shape[i]
-                elif coord[i].end > 0:
-                    end = coord[i].end
-                else:
-                    end = self.shape[i] + coord[i].end
-
-                assert end >= start
-                selection_shape.append(end - start)
-
-        return selection_shape
 
