@@ -4,11 +4,34 @@ import numpy as np
 from btree.table import Index, Schema, Table
 
 
-class SparseTensor(object):
+class SparseTensorView(object):
     def __init__(self, shape, dtype=np.int32):
         self.dtype = dtype
-        self.shape = tuple(shape)
+        self.shape = shape
         self.ndim = len(shape)
+
+    def __getitem__(self, _match):
+        raise NotImplementedError
+
+    def __setitem__(self, _match, _value):
+        raise NotImplementedError
+
+    def filled(self, match=None):
+        raise NotImplementedError
+
+    def to_dense(self):
+        dense = np.zeros(self.shape, self.dtype)
+        for entry in self.filled():
+            coord = entry[:-1]
+            value = entry[-1]
+            dense[coord] = value
+
+        return dense
+
+
+class SparseTensor(SparseTensorView):
+    def __init__(self, shape, dtype=np.int32):
+        super().__init__(shape, dtype)
 
         self._table = Table(Index(Schema(
             [(i, int) for i in range(self.ndim)],
@@ -77,12 +100,10 @@ class SparseTensor(object):
         for coord in itertools.product(*affected):
             self._table.upsert(coord, (value,))
 
-    def to_dense(self):
-        dense = np.zeros(self.shape, self.dtype)
-        for entry in self._table:
-            coord = entry[:-1]
-            value = entry[-1]
-            dense[coord] = value
-
-        return dense
+    def filled(self, match=None):
+        if match is None:
+            yield from self._table
+        else:
+            selector = dict(zip(range(len(match), match)))
+            yield from self._table.slice(selector)
 
