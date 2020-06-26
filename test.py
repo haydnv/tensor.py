@@ -24,9 +24,10 @@ def test_getitem():
     sparse = SparseTensor(dims)
     dense = np.zeros(dims)
 
-    for coord in [(3, 1, 0, 9)]:
+    for coord in [(3, 1, 0, 9), (3, -1, 0, 1)]:
         sparse[coord] = 1
         dense[coord] = 1
+        assert sparse[coord] == dense[coord]
         assert (sparse.to_dense() == dense).all()
 
 
