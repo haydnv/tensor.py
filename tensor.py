@@ -98,7 +98,7 @@ class SparseTensor(SparseTensorView):
         if match is None:
             yield from self._table
         else:
-            selector = dict(zip(range(len(match), match)))
+            selector = dict(zip(range(len(match)), match))
             yield from self._table.slice(selector)
 
 
@@ -113,16 +113,48 @@ class SparseTensorSlice(SparseTensorView):
             if match[axis] is None:
                 shape.append(source.shape[axis])
             elif isinstance(match[axis], slice):
-                s = validate_slice(match[axis], shape[axis])
-                shape.append((s.end - s.start) // s.step)
+                s = validate_slice(match[axis], source.shape[axis])
+                shape.append((s.stop - s.start) // s.step)
             elif isinstance(match[axis], tuple):
-                t = validate_tuple(match[axis], shape[axis])
+                t = validate_tuple(match[axis], source.shape[axis])
                 shape.append(len(t))
 
         for axis in range(len(match), source.ndim):
-            shape.append(source[axis])
+            shape.append(source.shape[axis])
 
         super().__init__(shape, source.dtype)
+        self._source = source
+        self._match = match
+
+    def filled(self, match = None):
+        elide = []
+        offset = []
+
+        for axis in range(len(self._match)):
+            if isinstance(self._match[axis], int):
+                elide.append(axis)
+            elif isinstance(self._match[axis], slice):
+                offset.append(self._match[axis].start)
+            elif isinstance(self._match[axis], tuple):
+                offset.append(self._match[axis][0])
+            else:
+                offset.append(0)
+
+        for axis in range(len(self._match), self._source.ndim):
+            offset.append(0)
+
+        def translate(coord):
+            assert len(coord) == self._source.ndim
+            elided = [coord[i] for i in range(len(coord)) if i not in elide]
+            return tuple(elided[i] - offset[i] for i in range(len(elided)))
+
+        if match is None:
+            for row in self._source.filled(self._match):
+                coord = row[:-1]
+                value = row[-1]
+                yield translate(coord) + (value,)
+        else:
+            raise NotImplementedError
 
 
 def validate_slice(s, dim):
@@ -146,6 +178,9 @@ def validate_slice(s, dim):
 
 
 def validate_tuple(t, dim):
+    if not t:
+        raise IndexError
+
     if not all(isinstance(match[axis][i], int) for i in range(len(match[axis]))):
         raise IndexError
 

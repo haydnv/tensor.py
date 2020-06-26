@@ -30,6 +30,9 @@ def test_getitem():
         assert sparse[coord] == dense[coord]
         assert (sparse.to_dense() == dense).all()
 
+    coord = (3, slice(1, 3))
+    assert (sparse[coord].to_dense() == dense[coord]).all()
+
 
 if __name__ == "__main__":
     test_setitem()
