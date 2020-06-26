@@ -1,3 +1,6 @@
 [submodule "btree"]
 	path = btree
 	url = https://github.com/haydnv/btree.py
+[submodule "einsum"]
+	path = einsum
+	url = https://github.com/haydnv/einsum.py.git

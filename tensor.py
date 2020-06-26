@@ -1,133 +1,106 @@
 import itertools
 import numpy as np
 
-from btree.btree import BTree
-from collections.abc import Iterable
+from btree.table import Index, Schema, Table
 
 
 class SparseTensor(object):
-    def from_dense(nparray):
-        tensor = SparseTensor(nparray.shape, nparray.dtype)
-        for coord in itertools.product(*[range(dim) for dim in nparray.shape]):
-            tensor[coord] = nparray[coord]
-
-        return tensor
-
-    def __init__(self, shape, contents=[], dtype=np.int32):
-        if isinstance(shape, Iterable):
-            shape = tuple(shape)
-        else:
-            raise ValueError
-
-        self.ndim = len(shape)
-        self.shape = shape
+    def __init__(self, shape, dtype=np.int32):
         self.dtype = dtype
+        self.shape = tuple(shape)
+        self.ndim = len(shape)
 
-        values = (list(coord) + [val] for (coord, val) in contents)
-        self.values = BTree(10, values)
+        self._table = Table(Index(Schema(
+            [(i, int) for i in range(self.ndim)],
+            [("value", self.dtype)])))
+        for i in range(self.ndim):
+            self._table.add_index(str(i), [i])
 
-    def __eq__(self, other):
-        if self.shape != other.shape:
-            return False
+    def __setitem__(self, coord, value):
+        value = self.dtype(value)
 
-        for coord in itertools.product(*(range(dim) for dim in self.shape)):
-            if self[coord] != other[coord]:
-                return False
+        if not isinstance(coord, tuple):
+            coord = (coord,)
 
-        return True
-
-    def _validate_index(self, index):
-        if len(index) > self.ndim:
+        if len(coord) > self.ndim:
             raise IndexError
 
-        validated = []
-        for i in range(self.ndim):
-            if isinstance(index[i], slice):
-                start = index[i].start if index[i].start else 0
-                stop = index[i].stop if index[i].stop else self.shape[i]
-                step = index[i].step if index[i].step else 1
-                validated.append(slice(start, stop, step))
-            elif isinstance(index[i], int):
-                if abs(index[i]) > self.shape[i]:
-                    raise IndexError
+        if not value:
+            selector = dict(zip(range(len(coord)), coord))
+            return self._table.slice(selector).delete()
+
+        affected = []
+        for axis in range(len(coord)):
+            s = coord[axis]
+
+            if s is None:
+                affected.append(range(self.shape[axis]))
+            elif isinstance(s, slice):
+                if s.start is None:
+                    start = 0
+                elif s.start < 0:
+                    start = self.shape[axis] + s.start
                 else:
-                    validated.append(index[i] if index[i] > 0 else self.shape[i] - index[i])
+                    start = s.start
 
-        return tuple(validated)
+                if s.stop is None:
+                    stop = self.shape[axis]
+                elif s.stop < 0:
+                    stop = self.shape[axis] + stop
+                else:
+                    stop = s.stop
 
-    def __getitem__(self, index):
-        self._validate_index(index)
-
-        if isinstance(index, int):
-            index = (index,)
-
-        if len(index) == 0:
-            return []
-
-        print(index)
-
-        selected_dim = []
-        for i in range(self.ndim):
-            if i > len(index):
-                selected_dim.append(self.shape[i])
-            elif isinstance(index[i], slice):
-                start = index[i].start if index[i].start else 0
-                stop = index[i].end if index[i].end else self.shape[i]
-
-                if start < 0:
-                    start = self.shape[i] - start
-                if stop < 0:
-                    stop = self.shape[i] - stop
-
-                if stop <= start:
-                    break
-
-                selected_dim.append(stop - start)
-            elif isinstance(index[i], int):
-                selected_dim.append(1)
+                step = s.step if s.step else 1
+                affected.append(range(start, stop, step))
             else:
-                raise IndexError
+                affected.append([s])
 
-        print("selection shape: {}".format(selected_dim))
+        for axis in range(len(coord), self.ndim):
+            affected.append(range(self.shape[axis]))
 
-        selected = []
-        selection = ((translate_coord(index, v[:-1]), v[-1]) for v in self.values[index])
-        return SparseTensor(selected_dim, selection)
-
-    def __setitem__(self, index, value):
-        index = self._validate_index(index)
-
-        if value == 0:
-            return
-
-        if isinstance(index, int) or isinstance(index, slice):
-            index = (index,)
-
-        self.values.update(list(index + (value,)))
+        for coord in itertools.product(*affected):
+            self._table.upsert(coord, (value,))
 
     def to_dense(self):
-        arr = np.zeros(self.shape)
-        for edge in self.values.select_all():
-            arr[tuple(edge[:-1])] = edge[-1]
+        dense = np.zeros(self.shape, self.dtype)
+        for entry in self._table:
+            coord = entry[:-1]
+            value = entry[-1]
+            dense[coord] = value
 
-        return arr
+        return dense
 
-    def __str__(self):
-        return "{}".format(self.to_dense())
+    def _selection_shape(self, coord):
+        if len(coord) > self.ndim:
+            raise IndexError
 
-def _translate(index, source_coord):
-    if not len(index) <= len(source_coord):
-        raise IndexError
-
-    target_coord = tuple(source_coord)
-    for i in range(len(index)):
-        if isinstance(index[i], slice):
-            if source_coord[i] % index.step != 0:
+        if len(coord) == self.ndim and all([isinstance(c, int) for c in coord]):
+            if any(abs(coord[i]) >= self.shape[i] for i in range(self.ndim)):
                 raise IndexError
 
-            target_coord[i] = (source_coord[i] - index[i].start) // index.step
-        else:
-            target_coord[i] = source_coord[i] - index[i].start
+            return 1
 
-    return target_coord
+        selection_shape = []
+        for i in len(coord):
+            if coord[i] is None:
+                selection_shape.append(self.shape[i])
+            elif isinstance(coord[i], slice):
+                if coord[i].start is None:
+                    start = 0
+                elif coord[i].start > 0:
+                    start = coord[i].start
+                else:
+                    start = self.shape[i] + coord[i].start
+
+                if coord[i].end is None:
+                    end = self.shape[i]
+                elif coord[i].end > 0:
+                    end = coord[i].end
+                else:
+                    end = self.shape[i] + coord[i].end
+
+                assert end >= start
+                selection_shape.append(end - start)
+
+        return selection_shape
 
