@@ -11,10 +11,18 @@ def test_setitem():
     for coord in [(3, 0, 1, 9), (4, 0, 2, 1), (2,)]:
         sparse[coord] = 1
         dense[coord] = 1
+    assert (sparse.to_dense() == dense).all()
 
     zero_out = (2, 0, 1)
     sparse[zero_out] = 0
     dense[zero_out] = 0
+    assert (sparse.to_dense() == dense).all()
+
+    update = SparseTensor([3, 1])
+    update[2, 0] = 1
+
+    sparse[1] = update
+    dense[1] = update.to_dense()
 
     assert (sparse.to_dense() == dense).all()
 
