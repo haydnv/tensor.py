@@ -66,11 +66,7 @@ class SparseTensor(SparseTensorView):
             self._table.add_index(str(i), [i])
 
     def __getitem__(self, match):
-        if not isinstance(match, tuple):
-            match = (match,)
-
-        if len(match) > self.ndim:
-            raise IndexError
+        match = validate_match(match, self.shape)
 
         if len(match) == self.ndim and all(isinstance(c, int) for c in match):
             if any(abs(match[axis]) > self.shape[axis] for axis in range(self.ndim)):
@@ -84,15 +80,11 @@ class SparseTensor(SparseTensorView):
                 return value
 
             return 0
-
-        return SparseTensorSlice(self, match)
+        else:
+            return SparseTensorSlice(self, match)
 
     def __setitem__(self, match, value):
-        if not isinstance(match, tuple):
-            match = (match,)
-
-        if len(match) > self.ndim:
-            raise IndexError
+        match = validate_match(match, self.shape)
 
         if isinstance(value, Tensor):
             dest = self[match]
@@ -126,15 +118,13 @@ class SparseTensor(SparseTensorView):
                 if match[axis] is None:
                     affected.append(range(self.shape[axis]))
                 elif isinstance(match[axis], slice):
-                    s = validate_slice(match[axis], self.shape[axis])
+                    s = match[axis]
                     affected.append(range(s.start, s.stop, s.step))
                 elif isinstance(match[axis], tuple):
-                    affected.append(validate_tuple(match[axis], self.shape[axis]))
+                    affected.append(match[axis])
                 elif match[axis] < 0:
-                    assert abs(match[axis]) < self.shape[axis]
                     affected.append([self.shape[axis] + match[axis]])
                 else:
-                    assert match[axis] < self.shape[axis]
                     affected.append([match[axis]])
 
             for axis in range(len(match), self.ndim):
@@ -161,7 +151,7 @@ class SparseTensor(SparseTensorView):
 
 class SparseTensorSlice(SparseTensorView):
     def __init__(self, source, match):
-        validate_match(match, source.shape)
+        match = validate_match(match, source.shape)
 
         shape = []
         offset = {}
@@ -172,12 +162,11 @@ class SparseTensorSlice(SparseTensorView):
                 shape.append(source.shape[axis])
                 offset[axis] = 0
             elif isinstance(match[axis], slice):
-                s = validate_slice(match[axis], source.shape[axis])
+                s = match[axis]
                 shape.append((s.stop - s.start) // s.step)
                 offset[axis] = s.start
             elif isinstance(match[axis], tuple):
-                t = validate_tuple(match[axis], source.shape[axis])
-                shape.append(len(t))
+                shape.append(len(match[axis]))
             else:
                 elided.append(axis)
 
@@ -228,7 +217,7 @@ class SparseTensorSlice(SparseTensorView):
                         source_coord.append(None)
                 elif isinstance(at, slice):
                     if axis < len(match):
-                        match_axis = match[axis]
+                        match_axis = validate_slice(match[axis], source.shape[axis])
                     else:
                         match_axis = validate_slice(slice(None), source.shape[axis])
 
@@ -245,7 +234,7 @@ class SparseTensorSlice(SparseTensorView):
                         elif at.stop < 0:
                             stop = match_axis.stop + at.stop
                         else:
-                            stop = match_axis.start + (at.stop // match_axis.step)
+                            stop = match_axis.start + math.ceil(at.stop / match_axis.step)
 
                         if at.step is None or at.step == 1:
                             step = match_axis.step
@@ -269,7 +258,8 @@ class SparseTensorSlice(SparseTensorView):
         self._invert_coord = invert_coord
 
     def __getitem__(self, match):
-        source_coord = validate_match(match, self.shape)
+        match = validate_match(match, self.shape)
+        source_coord = self._invert_coord(match)
         return self._source[source_coord]
 
     def __setitem__(self, match, value):
@@ -298,9 +288,9 @@ def validate_match(match, shape):
         if match[axis] is None:
             pass
         elif isinstance(match[axis], slice):
-            validate_slice(match[axis], shape[axis])
+            match[axis] = validate_slice(match[axis], shape[axis])
         elif isinstance(match[axis], tuple) or isinstance(match[axis], list):
-            validate_tuple(match[axis], shape[axis])
+            match[axis] = validate_tuple(match[axis], shape[axis])
         elif match[axis] < 0:
             assert abs(match[axis]) < shape[axis]
         else:
