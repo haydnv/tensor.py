@@ -26,11 +26,24 @@ def test_setitem():
 
     assert (sparse.to_dense() == dense).all()
 
+    sparse[:, :, slice(None, None, 2)] = 3
+    dense[:, :, slice(None, None, 2)] = 3
+    assert (sparse.to_dense() == dense).all()
+
+    sparse[:][0, 0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    dense[:][0, 0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    assert (sparse.to_dense() == dense).all()
+
 
 def test_getitem():
     dims = [5, 3, 1, 10]
     sparse = SparseTensor(dims)
     dense = np.zeros(dims)
+
+    assert sparse[:].shape == dense[:].shape
+    assert sparse[:, :].shape == dense[:, :].shape
+    assert sparse[:, :, 0].shape == dense[:, :, 0].shape
+    assert sparse[:, :, slice(1, None, 2)].shape == dense[:, :, slice(1, None, 2)].shape
 
     for coord in [(3, 1, 0, 9), (3, -1, 0, 1)]:
         sparse[coord] = 1
