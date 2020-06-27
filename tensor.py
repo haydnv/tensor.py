@@ -22,7 +22,7 @@ class Tensor(object):
     def __setitem__(self, _match, _value):
         raise NotImplementedError
 
-    def filled(self, match=None):
+    def filled(self):
         raise NotImplementedError
 
 
@@ -31,12 +31,11 @@ class BlockTensor(Tensor):
         super().__init__(source.shape)
         self._source = source
 
-    def filled(self, match=None):
-        source = self._source if match is None else self._source[match]
-        for coord in itertools.product(*source.shape):
+    def filled(self):
+        for coord in itertools.product(*self._source.shape):
             value = source[coord]
             if value != 0:
-                yield value
+                yield tuple(coord) + (value,)
 
 
 class SparseTensorView(Tensor):
@@ -62,6 +61,7 @@ class SparseTensor(SparseTensorView):
         self._table = Table(Index(Schema(
             [(i, int) for i in range(self.ndim)],
             [("value", self.dtype)])))
+
         for i in range(self.ndim):
             self._table.add_index(str(i), [i])
 
@@ -145,8 +145,24 @@ class SparseTensor(SparseTensorView):
         if match is None:
             yield from self._table
         else:
-            selector = dict(zip(range(len(match)), match))
-            yield from self._table.slice(selector)
+            selector = []
+            steps = {}
+            for axis in range(len(match)):
+                coord = match[axis]
+                if isinstance(coord, slice) and coord.step is not None:
+                    selector.append(slice(coord.start, coord.stop))
+                    if coord.step != 1:
+                        steps[axis] = coord.step
+                else:
+                    selector.append(coord)
+
+            selector = dict(zip(range(len(match)), selector))
+            table_slice = self._table.slice(selector)
+            if steps:
+                table_slice = table_slice.filter(
+                    lambda r: all(r[axis] % steps[axis] == 0 for axis in steps))
+
+            yield from table_slice
 
 
 class SparseTensorSlice(SparseTensorView):
@@ -217,7 +233,7 @@ class SparseTensorSlice(SparseTensorView):
                         source_coord.append(None)
                 elif isinstance(at, slice):
                     if axis < len(match):
-                        match_axis = validate_slice(match[axis], source.shape[axis])
+                        match_axis = match[axis]
                     else:
                         match_axis = validate_slice(slice(None), source.shape[axis])
 
@@ -227,7 +243,7 @@ class SparseTensorSlice(SparseTensorView):
                         elif at.start < 0:
                             start = match_axis.stop + at.start
                         else:
-                            start = at.start - match_axis.start
+                            start = at.start + match_axis.start
 
                         if at.stop is None:
                             stop = match_axis.stop
@@ -248,9 +264,9 @@ class SparseTensorSlice(SparseTensorView):
 
                         source_coord.append(match[axis])
                 elif isinstance(at, tuple):
-                    source_coord.append(tuple(c - offset[axis] for c in at))
+                    source_coord.append(tuple(c + offset[axis] for c in at))
                 else:
-                    source_coord.append(at - offset[axis])
+                    source_coord.append(at + offset[axis])
 
             return tuple(source_coord)
 
@@ -260,6 +276,7 @@ class SparseTensorSlice(SparseTensorView):
     def __getitem__(self, match):
         match = validate_match(match, self.shape)
         source_coord = self._invert_coord(match)
+        print("{}[{}] := source[{}]".format(self.shape, match, source_coord))
         return self._source[source_coord]
 
     def __setitem__(self, match, value):
@@ -267,14 +284,11 @@ class SparseTensorSlice(SparseTensorView):
         source_coord = self._invert_coord(match)
         self._source[source_coord] = value
 
-    def filled(self, match = None):
-        if match is None:
-            for row in self._source.filled(self._match):
-                coord = row[:-1]
-                value = row[-1]
-                yield self._map_coord(coord) + (value,)
-        else:
-            raise NotImplementedError
+    def filled(self):
+        for row in self._source.filled(self._match):
+            coord = row[:-1]
+            value = row[-1]
+            yield self._map_coord(coord) + (value,)
 
 
 def validate_match(match, shape):
@@ -297,6 +311,7 @@ def validate_match(match, shape):
             assert match[axis] < shape[axis]
 
     return tuple(match)
+
 
 def validate_slice(s, dim):
     if s.start is None:
