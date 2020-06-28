@@ -145,18 +145,21 @@ class SparseTensor(SparseTensorView):
         if match is None:
             yield from self._table
         else:
-            selector = []
+            selector = {}
             steps = {}
             for axis in range(len(match)):
                 coord = match[axis]
-                if isinstance(coord, slice) and coord.step is not None:
-                    selector.append(slice(coord.start, coord.stop))
-                    if coord.step != 1:
-                        steps[axis] = (coord.start, coord.step)
+                default = validate_slice(slice(None), self.shape[axis])
+                if isinstance(coord, slice):
+                    if coord == default:
+                        pass
+                    elif coord.step is not None and coord.step != 1:
+                        selector[axis] = slice(coord.start, coord.stop)
+                        if coord.step != 1:
+                            steps[axis] = (coord.start, coord.step)
                 else:
-                    selector.append(coord)
+                    selector[axis] = coord
 
-            selector = dict(zip(range(len(match)), selector))
             table_slice = self._table.slice(selector)
             if steps:
                 table_slice = table_slice.filter(
@@ -249,10 +252,22 @@ class SparseTensorSlice(SparseTensorView):
 
                         if at.stop is None:
                             stop = match_axis.stop
-                        elif at.stop < 0:
-                            stop = match_axis.stop + at.stop
                         else:
-                            stop = start + (match_axis.stop - match_axis.start)
+                            if at.start is None:
+                                at_start = 0
+                            elif at.start < 0:
+                                at_start = self.shape[axis] + at.start
+                            else:
+                                at_start = at.start
+
+                            if at.stop is None:
+                                at_stop = self.shape[axis]
+                            elif at.stop < 0:
+                                at_stop = self.shape[axis] + at.stop
+                            else:
+                                at_stop = at.stop
+
+                            stop = start + (match_axis.step * (at_stop - at_start))
 
                         if at.step is None or at.step == 1:
                             step = match_axis.step

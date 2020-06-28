@@ -4,7 +4,19 @@ from tensor import SparseTensor
 
 
 def test_setitem():
-    dims = [5, 1, 3, 10]
+    dims = [7, 10]
+    sparse = SparseTensor(dims)
+    dense = np.zeros(dims)
+
+    sparse_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
+    dense_slice = dense[slice(None, None, 2)][slice(None, -1, 3)]
+    assert sparse_slice.shape == dense_slice.shape
+
+    sparse[slice(None, None, 2)][slice(None, None, 3)] = 1
+    dense[slice(None, None, 2)][slice(None, None, 3)] = 1
+    assert (sparse.to_dense() == dense).all()
+
+    dims = [5, 7, 3, 10]
     sparse = SparseTensor(dims)
     dense = np.zeros(dims)
 
@@ -23,19 +35,33 @@ def test_setitem():
 
     sparse[1] = update
     dense[1] = update.to_dense()
-
     assert (sparse.to_dense() == dense).all()
 
-    sparse[:, :, slice(None, None, 2)] = 3
-    dense[:, :, slice(None, None, 2)] = 3
+    sparse[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
+    dense[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
     assert (sparse.to_dense() == dense).all()
 
-    sparse[:][0, 0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    dense[:][0, 0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    sparse[0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    dense[0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    sparse_slice = sparse[0, 0, :, :]
+    dense_slice = dense[0, 0, :, :]
+    assert (sparse_slice.to_dense() == dense_slice).all()
     assert (sparse.to_dense() == dense).all()
 
 
 def test_getitem():
+    dims = [3]
+    sparse = SparseTensor(dims)
+    dense = np.zeros(dims)
+
+    sparse_slice = sparse[slice(2, 3, 2)]
+    dense_slice = dense[slice(2, 3, 2)]
+    assert sparse_slice.shape == dense_slice.shape
+
+    sparse_slice = sparse[slice(1, 3)][slice(1, 2, 2)]
+    dense_slice = dense[slice(1, 3)][slice(1, 2, 2)]
+    assert sparse_slice.shape == dense_slice.shape
+
     dims = [5, 3, 1, 10]
     sparse = SparseTensor(dims)
     dense = np.zeros(dims)
@@ -44,6 +70,10 @@ def test_getitem():
     assert sparse[:, :].shape == dense[:, :].shape
     assert sparse[:, :, 0].shape == dense[:, :, 0].shape
     assert sparse[:, :, slice(1, None, 2)].shape == dense[:, :, slice(1, None, 2)].shape
+
+    sparse_slice = sparse[slice(2), :][slice(1, None, 2)]
+    dense_slice = dense[slice(2), :][slice(1, None, 2)]
+    assert sparse_slice.shape == dense_slice.shape
 
     for coord in [(3, 1, 0, 9), (3, -1, 0, 1)]:
         sparse[coord] = 1
