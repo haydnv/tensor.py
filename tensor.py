@@ -152,7 +152,7 @@ class SparseTensor(SparseTensorView):
                 if isinstance(coord, slice) and coord.step is not None:
                     selector.append(slice(coord.start, coord.stop))
                     if coord.step != 1:
-                        steps[axis] = coord.step
+                        steps[axis] = (coord.start, coord.step)
                 else:
                     selector.append(coord)
 
@@ -160,7 +160,9 @@ class SparseTensor(SparseTensorView):
             table_slice = self._table.slice(selector)
             if steps:
                 table_slice = table_slice.filter(
-                    lambda r: all(r[axis] % steps[axis] == 0 for axis in steps))
+                    lambda r: all(
+                        (r[axis] - offset) % step == 0
+                        for (axis, (offset, step)) in steps.items()))
 
             yield from table_slice
 
@@ -179,7 +181,7 @@ class SparseTensorSlice(SparseTensorView):
                 offset[axis] = 0
             elif isinstance(match[axis], slice):
                 s = match[axis]
-                shape.append((s.stop - s.start) // s.step)
+                shape.append(math.ceil((s.stop - s.start) / s.step))
                 offset[axis] = s.start
             elif isinstance(match[axis], tuple):
                 shape.append(len(match[axis]))
@@ -250,7 +252,7 @@ class SparseTensorSlice(SparseTensorView):
                         elif at.stop < 0:
                             stop = match_axis.stop + at.stop
                         else:
-                            stop = match_axis.start + math.ceil(at.stop / match_axis.step)
+                            stop = start + (match_axis.stop - match_axis.start)
 
                         if at.step is None or at.step == 1:
                             step = match_axis.step
@@ -276,7 +278,6 @@ class SparseTensorSlice(SparseTensorView):
     def __getitem__(self, match):
         match = validate_match(match, self.shape)
         source_coord = self._invert_coord(match)
-        print("{}[{}] := source[{}]".format(self.shape, match, source_coord))
         return self._source[source_coord]
 
     def __setitem__(self, match, value):
@@ -324,7 +325,7 @@ def validate_slice(s, dim):
     if s.stop is None:
         stop = dim
     elif s.stop < 0:
-        stop = dim + stop
+        stop = dim + s.stop
     else:
         stop = s.stop
 
