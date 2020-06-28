@@ -250,29 +250,16 @@ class SparseTensorSlice(SparseTensorView):
                         else:
                             start = at.start + match_axis.start
 
-                        if at.stop is None:
-                            stop = match_axis.stop
-                        else:
-                            if at.start is None:
-                                at_start = 0
-                            elif at.start < 0:
-                                at_start = self.shape[axis] + at.start
-                            else:
-                                at_start = at.start
-
-                            if at.stop is None:
-                                at_stop = self.shape[axis]
-                            elif at.stop < 0:
-                                at_stop = self.shape[axis] + at.stop
-                            else:
-                                at_stop = at.stop
-
-                            stop = start + (match_axis.step * (at_stop - at_start))
-
                         if at.step is None or at.step == 1:
                             step = match_axis.step
                         else:
                             step = match_axis.step * at.step
+
+                        if at.stop is None:
+                            stop = match_axis.stop
+                        else:
+                            at = validate_slice(at, (match_axis.stop - match_axis.start))
+                            stop = start + (match_axis.step * (at.stop - at.start))
 
                         source_coord.append(slice(start, stop, step))
                     else:
