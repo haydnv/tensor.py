@@ -3,7 +3,25 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from base import Tensor, SparseTensorView
+from base import Broadcast, Tensor
+
+
+class SparseTensorView(Tensor):
+    def __init__(self, shape, dtype, default):
+        super().__init__(shape, dtype)
+        self._default = default
+
+    def broadcast(self, shape):
+        return SparseBroadcast(self, shape)
+
+    def to_dense(self):
+        dense = np.ones(self.shape, self.dtype) * self._default
+        for entry in self.filled():
+            coord = entry[:-1]
+            value = entry[-1]
+            dense[coord] = value
+
+        return dense
 
 
 class SparseTensor(SparseTensorView):
@@ -40,30 +58,12 @@ class SparseTensor(SparseTensorView):
 
         if isinstance(value, Tensor):
             dest = self[match]
-
-            if value.ndim > dest.ndim:
-                raise ValueError
-
-            broadcast = [True for _ in range(dest.ndim)]
-            offset = dest.ndim - value.ndim
-            for axis in range(value.ndim):
-                if dest.shape[offset + axis] == value.shape[axis]:
-                    broadcast[offset + axis] = False
-                elif dest.shape[offset + axis] != 1 and value.shape[axis] == 1:
-                    broadcast[offset + axis] = True
-                else:
-                    print(dest.shape, value.shape, axis, offset)
-                    raise ValueError("cannot broadcast")
+            if dest.shape != value.shape:
+                value = value.broadcast(dest.shape)
 
             for row in value.filled():
-                source_coord = row[:-1]
-                val = row[-1]
-                dest_coord = [None for _ in range(dest.ndim)]
-                for axis in range(value.ndim):
-                    if not broadcast[axis + offset]:
-                        dest_coord[axis + offset] = source_coord[axis]
+                dest[row[:-1]] = row[-1]
 
-                dest[tuple(dest_coord)] = val
         elif value == self._default:
             self._delete_filled(match)
         else:
@@ -152,6 +152,18 @@ class SparseTensor(SparseTensorView):
             table_slice = table_slice.filter(step_filter)
 
         return table_slice
+
+
+class SparseBroadcast(Broadcast, SparseTensorView):
+    def __init__(self, source, shape):
+        Broadcast.__init__(self, source, shape)
+        SparseTensorView.__init__(self, shape, source.dtype, source._default)
+
+    def filled(self):
+        for row in self._source.filled():
+            coord = row[:-1]
+            value = row[-1]
+            yield self._map_coord(coord) + (value,)
 
 
 class SparseTensorSlice(SparseTensorView):

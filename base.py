@@ -55,43 +55,72 @@ class Tensor(object):
         return Permutation(self, permutation)
 
 
-class SparseTensorView(Tensor):
-    def __init__(self, shape, dtype, default):
-        super().__init__(shape, dtype)
-        self._default = default
+class Rebase(Tensor):
+    def __init__(self, source, shape):
+        Tensor.__init__(self, shape, source.dtype)
+        self._source = source
 
-    def to_dense(self):
-        dense = np.ones(self.shape, self.dtype) * self._default
-        for entry in self.filled():
-            coord = entry[:-1]
-            value = entry[-1]
-            dense[coord] = value
+    def __getitem__(self, coord):
+        return self._source[self._invert_coord(coord)]
 
-        return dense
+    def __setitem__(self, coord, value):
+        self._source[self._invert_coord(coord)] = value
+
+    def _invert_coord(self, coord):
+        raise NotImplementedError
+
+    def _map_coord(self, coord):
+        raise NotImplementedError
 
 
-class Permutation(Tensor):
+class Broadcast(Rebase):
+    def __init__(self, source, shape):
+        if source.ndim > len(shape):
+            raise ValueError
+
+        Rebase.__init__(self, source, shape)
+
+        broadcast = [True for _ in range(self.ndim)]
+        offset = self.ndim - source.ndim
+        for axis in range(offset, self.ndim):
+            if self.shape[axis] == source.shape[axis - offset]:
+                broadcast[axis] = False
+            elif self.shape[axis] != 1 and source.shape[axis - offset] == 1:
+                broadcast[axis] = True
+            else:
+                print(self.shape, source.shape, axis, offset)
+                raise ValueError("cannot broadcast")
+
+        self._broadcast = broadcast
+        self._offset = offset
+
+    def __setitem__(self, _coord, _value):
+        raise IndexError
+
+    def _invert_coord(self, coord):
+        raise NotImplementedError
+
+    def _map_coord(self, source_coord):
+        coord = [slice(None) for _ in range(self.ndim)]
+        for axis in range(self._source.ndim):
+            if not self._broadcast[axis + self._offset]:
+                coord[axis + self._offset] = source_coord[axis]
+
+        return tuple(coord)
+
+
+class Permutation(Rebase):
     def __init__(self, source, permutation):
         assert source.ndim == len(permutation)
-        super().__init__(
-            [source.shape[axis] for axis in range(source.ndim)], source.dtype)
+        super().__init__([source.shape[axis] for axis in permutation])
 
-        self._source = source
         self._permute_from = dict(zip(range(self.ndim), permutation))
         self._permute_to = {
             dest_axis: source_axis
             for (source_axis, dest_axis) in self._permute_from.items()}
 
     def __getitem__(self, match):
-        to_permute = self._source[self._invert_coord(match)]
-        if isinstance(to_permute, self.dtype):
-            return to_permute
-        else:
-            permutation = [self._permute_from[axis] for axis in range(self.ndim)]
-            return Permutation(to_permute, permutation)
-
-    def __setitem__(self, match, value):
-        self._source[self._invert_coord(match)] = value
+        raise NotImplementedError
 
     def _invert_coord(self, coord):
         if not isinstance(coord, tuple):
