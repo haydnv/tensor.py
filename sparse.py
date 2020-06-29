@@ -7,8 +7,8 @@ from base import Tensor, SparseTensorView
 
 
 class SparseTensor(SparseTensorView):
-    def __init__(self, shape, dtype=np.int32):
-        super().__init__(tuple(shape), dtype)
+    def __init__(self, shape, dtype=np.int32, default=0):
+        super().__init__(tuple(shape), dtype, default)
 
         self._table = Table(Index(Schema(
             [(i, int) for i in range(self.ndim)],
@@ -31,7 +31,7 @@ class SparseTensor(SparseTensorView):
             for (value,) in self._table.slice(selector).select(["value"]):
                 return value
 
-            return 0
+            return self._default
         else:
             return SparseTensorSlice(self, match)
 
@@ -64,7 +64,7 @@ class SparseTensor(SparseTensorView):
                         dest_coord[axis + offset] = source_coord[axis]
 
                 dest[tuple(dest_coord)] = val
-        elif not value:
+        elif value == self._default:
             self._delete_filled(match)
         else:
             affected = []
@@ -156,7 +156,7 @@ class SparseTensorSlice(SparseTensorView):
             shape.append(source.shape[axis])
             offset[axis] = 0
 
-        super().__init__(tuple(shape), source.dtype)
+        super().__init__(tuple(shape), source.dtype, source._default)
         self._source = source
         self._match = match
 

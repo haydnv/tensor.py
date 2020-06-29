@@ -85,8 +85,25 @@ def test_getitem():
     assert (sparse[coord].to_dense() == dense[coord]).all()
 
 
+def test_sparse_with_default():
+    dims = [2, 3]
+    sparse = SparseTensor(dims, dtype=np.bool, default=True)
+    dense = np.ones(dims, np.bool)
+    assert (sparse.to_dense() == dense).all()
+
+    dims = [3, 5, 4, 1]
+    sparse = SparseTensor(dims, default=5)
+    dense = np.ones(dims) * 5
+    assert (sparse.to_dense() == dense).all()
+
+    sparse[0, slice(3, 2), slice(1, -2)] = -1
+    dense[0, slice(3, 2), slice(1, -2)] = -1
+    assert (sparse.to_dense() == dense).all()
+
+
 if __name__ == "__main__":
     test_setitem()
     test_getitem()
+    test_sparse_with_default()
     print("PASS")
 

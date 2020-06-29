@@ -18,6 +18,9 @@ class Tensor(object):
     def __setitem__(self, _match, _value):
         raise NotImplementedError
 
+    def __eq__(self, other):
+        raise NotImplementedError
+
     def copy(self):
         raise NotImplementedError
 
@@ -35,11 +38,12 @@ class Tensor(object):
 
 
 class SparseTensorView(Tensor):
-    def __init__(self, shape, dtype):
+    def __init__(self, shape, dtype, default):
         super().__init__(shape, dtype)
+        self._default = default
 
     def to_dense(self):
-        dense = np.zeros(self.shape, self.dtype)
+        dense = np.ones(self.shape, self.dtype) * self._default
         for entry in self.filled():
             coord = entry[:-1]
             value = entry[-1]
