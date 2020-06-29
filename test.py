@@ -25,7 +25,7 @@ def test_setitem():
         dense[coord] = 1
     assert (sparse.to_dense() == dense).all()
 
-    zero_out = (2, 0, 1)
+    zero_out = (2, 0, slice(None), slice(1, -3, 3))
     sparse[zero_out] = 0
     dense[zero_out] = 0
     assert (sparse.to_dense() == dense).all()
