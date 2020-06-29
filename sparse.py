@@ -90,45 +90,68 @@ class SparseTensor(SparseTensorView):
 
             self._table.rebalance()
 
+    def __sub__(self, other):
+        raise NotImplementedError
+
+    def __xor__(self, other):
+        raise NotImplementedError
+
+    def as_type(self, cast_to):
+        if cast_to == self.dtype:
+            return self
+
+        return self._copy(cast_to)
+
+    def copy(self):
+        return self._copy(self.dtype)
+
     def filled(self, match=None):
         if match is None:
             yield from self._table
         else:
             yield from self._slice_table(match)
 
+    def _copy(self, dtype):
+        copied = SparseTensor(self.shape, dtype, dtype(self._default))
+        for row in self.filled():
+            coord = row[:-1]
+            copied[coord] = dtype(row[-1])
+
+        return copied
+
     def _delete_filled(self, match):
-            self._slice_table(match).delete()
+        self._slice_table(match).delete()
 
     def _slice_table(self, match):
-            selector = {}
-            steps = {}
-            for axis in range(len(match)):
-                coord = match[axis]
-                if isinstance(coord, slice):
-                    coord = validate_slice(coord, self.shape[axis])
-                    default = validate_slice(slice(None), self.shape[axis])
-                    if coord == default:
-                        pass
-                    elif coord.step != 1:
-                        selector[axis] = slice(coord.start, coord.stop, 1)
-                        if coord.step != 1:
-                            steps[axis] = (coord.start, coord.step)
-                    else:
-                        selector[axis] = coord
+        selector = {}
+        steps = {}
+        for axis in range(len(match)):
+            coord = match[axis]
+            if isinstance(coord, slice):
+                coord = validate_slice(coord, self.shape[axis])
+                default = validate_slice(slice(None), self.shape[axis])
+                if coord == default:
+                    pass
+                elif coord.step != 1:
+                    selector[axis] = slice(coord.start, coord.stop, 1)
+                    if coord.step != 1:
+                        steps[axis] = (coord.start, coord.step)
                 else:
                     selector[axis] = coord
+            else:
+                selector[axis] = coord
 
-            table_slice = self._table.slice(selector)
-            if steps:
-                def step_filter(row):
-                    step_match = all(
-                        (row[axis] - offset) % step == 0
-                        for (axis, (offset, step)) in steps.items())
-                    return step_match
+        table_slice = self._table.slice(selector)
+        if steps:
+            def step_filter(row):
+                step_match = all(
+                    (row[axis] - offset) % step == 0
+                    for (axis, (offset, step)) in steps.items())
+                return step_match
 
-                table_slice = table_slice.filter(step_filter)
+            table_slice = table_slice.filter(step_filter)
 
-            return table_slice
+        return table_slice
 
 
 class SparseTensorSlice(SparseTensorView):

@@ -12,13 +12,31 @@ class Tensor(object):
         self.shape = tuple(shape)
         self.ndim = len(shape)
 
+    def __bool__(self, other):
+        return self.as_type(np.bool)
+
+    def __eq__(self, other):
+        if self.shape != other.shape:
+            return False
+
+        if self.dtype == np.bool and other.dtype == np.bool:
+            return self ^ other
+
+        return not (self - other)
+
     def __getitem__(self, _match):
         raise NotImplementedError
 
     def __setitem__(self, _match, _value):
         raise NotImplementedError
 
-    def __eq__(self, other):
+    def __sub__(self, other):
+        raise NotImplementedError
+
+    def __xor__(self, other):
+        raise NotImplementedError
+
+    def as_type(self):
         raise NotImplementedError
 
     def copy(self):
