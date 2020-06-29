@@ -1,6 +1,6 @@
 import numpy as np
 
-from tensor import SparseTensor
+from sparse import SparseTensor
 
 
 def test_setitem():
