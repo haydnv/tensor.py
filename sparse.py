@@ -3,23 +3,7 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from base import Tensor
-
-
-class SparseTensorView(Tensor):
-    def __init__(self, shape, dtype=np.int32):
-        self.dtype = dtype
-        self.shape = shape
-        self.ndim = len(shape)
-
-    def to_dense(self):
-        dense = np.zeros(self.shape, self.dtype)
-        for entry in self.filled():
-            coord = entry[:-1]
-            value = entry[-1]
-            dense[coord] = value
-
-        return dense
+from base import Tensor, SparseTensorView
 
 
 class SparseTensor(SparseTensorView):
