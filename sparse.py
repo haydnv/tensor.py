@@ -56,7 +56,7 @@ class SparseTensor(SparseTensorView):
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
 
-        if isinstance(value, Tensor):
+        if isinstance(value, SparseTensorView) and value._default == self._default:
             dest = self[match]
             if dest.shape != value.shape:
                 value = value.broadcast(dest.shape)
@@ -64,6 +64,8 @@ class SparseTensor(SparseTensorView):
             for row in value.filled():
                 dest[row[:-1]] = row[-1]
 
+        elif isinstance(value, Tensor):
+            Tensor.__setitem__(self, match, value)
         elif value == self._default:
             self._delete_filled(match)
         else:
