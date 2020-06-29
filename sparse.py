@@ -3,7 +3,7 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from tensor import Tensor
+from base import Tensor
 
 
 class SparseTensorView(Tensor):
