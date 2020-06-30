@@ -7,12 +7,11 @@ from base import Broadcast, Tensor
 
 
 class SparseTensorView(Tensor):
-    def __init__(self, shape, dtype, default):
+    def __init__(self, shape, dtype):
         super().__init__(shape, dtype)
-        self._default = default
 
     def __invert__(self):
-        inverted = SparseTensor(self.shape, np.bool, not self._default)
+        inverted = SparseTensor(self.shape, np.bool)
         for row in self.filled():
             inverted[row[:-1]] = not row[-1]
         return inverted
@@ -62,7 +61,7 @@ class SparseTensorView(Tensor):
             if this.shape != that.shape:
                 that = that.broadcast(self.shape)
 
-            xor = SparseTensor(this.shape, np.bool, (this._default ^ that._default))
+            xor = SparseTensor(this.shape, np.bool)
 
             for row in this.filled():
                 coord = row[:-1]
@@ -78,6 +77,20 @@ class SparseTensorView(Tensor):
         else:
             Tensor.__xor__(self, other)
 
+    def all(self):
+        for row in self.filled():
+            if not row[-1]:
+                return False
+
+        return True
+
+    def any(self):
+        for row in self.filled():
+            if row[-1]:
+                return True
+
+        return False
+
     def as_type(self, cast_to):
         if cast_to == self.dtype:
             return self
@@ -91,7 +104,7 @@ class SparseTensorView(Tensor):
         return self._copy(self.dtype)
 
     def to_dense(self):
-        dense = np.ones(self.shape, self.dtype) * self._default
+        dense = np.zeros(self.shape, self.dtype)
         for entry in self.filled():
             coord = entry[:-1]
             value = entry[-1]
@@ -100,7 +113,7 @@ class SparseTensorView(Tensor):
         return dense
 
     def _copy(self, dtype):
-        copied = SparseTensor(self.shape, dtype, dtype(self._default))
+        copied = SparseTensor(self.shape, dtype)
         for row in self.filled():
             coord = row[:-1]
             copied[coord] = dtype(row[-1])
@@ -109,8 +122,8 @@ class SparseTensorView(Tensor):
 
 
 class SparseTensor(SparseTensorView):
-    def __init__(self, shape, dtype=np.int32, default=0):
-        super().__init__(tuple(shape), dtype, default)
+    def __init__(self, shape, dtype=np.int32):
+        super().__init__(tuple(shape), dtype)
 
         self._table = Table(Index(Schema(
             [(i, int) for i in range(self.ndim)],
@@ -133,14 +146,14 @@ class SparseTensor(SparseTensorView):
             for (value,) in self._table.slice(selector).select(["value"]):
                 return value
 
-            return self._default
+            return self.dtype(0)
         else:
             return SparseTensorSlice(self, match)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
 
-        if isinstance(value, SparseTensorView) and value._default == self._default:
+        if isinstance(value, SparseTensorView):
             dest = self[match]
             if dest.shape != value.shape:
                 value = value.broadcast(dest.shape)
@@ -150,7 +163,7 @@ class SparseTensor(SparseTensorView):
 
         elif isinstance(value, Tensor):
             Tensor.__setitem__(self, match, value)
-        elif value == self._default:
+        elif value == self.dtype(0):
             self._delete_filled(match)
         else:
             affected = []
@@ -220,7 +233,7 @@ class SparseTensor(SparseTensorView):
 class SparseBroadcast(Broadcast, SparseTensorView):
     def __init__(self, source, shape):
         Broadcast.__init__(self, source, shape)
-        SparseTensorView.__init__(self, shape, source.dtype, source._default)
+        SparseTensorView.__init__(self, shape, source.dtype)
 
     def filled(self):
         for row in self._source.filled():
@@ -254,7 +267,7 @@ class SparseTensorSlice(SparseTensorView):
             shape.append(source.shape[axis])
             offset[axis] = 0
 
-        super().__init__(tuple(shape), source.dtype, source._default)
+        super().__init__(tuple(shape), source.dtype)
         self._source = source
         self._match = match
 
