@@ -1,3 +1,4 @@
+import functools
 import itertools
 import math
 import numpy as np
@@ -10,11 +11,22 @@ class SparseTensorView(Tensor):
     def __init__(self, shape, dtype):
         super().__init__(shape, dtype)
 
-    def __invert__(self):
-        inverted = SparseTensor(self.shape, np.bool)
-        for row in self.filled():
-            inverted[row[:-1]] = not row[-1]
-        return inverted
+    def __eq__(self, other):
+        if isinstance(other, self.dtype):
+            # todo: replace with DenseTensor when implemented
+            eq == np.ones(self.shape, np.bool) * (other == self.dtype(0))
+            for row in self.filled():
+                eq[row[:-1]] = row[-1] == other
+            return eq
+        elif self.shape != other.shape:
+            return self == other.broadcast(self.shape)
+        elif isinstance(other, SparseTensorView):
+            eq = np.ones(self.shape, np.bool)
+            for row in self.filled():
+                eq[row[-1]] = row[-1] == other[row[:-1]]
+            return eq
+        else:
+            return Tensor.__eq__(other, self)
 
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
@@ -78,16 +90,19 @@ class SparseTensorView(Tensor):
             Tensor.__xor__(self, other)
 
     def all(self):
-        for row in self.filled():
-            if not row[-1]:
-                return False
+        if not self.shape:
+            return True
 
-        return True
+        expected = functools.reduce(lambda p, a: p * a, self.shape, 1)
+        actual = 0
+        for _ in self.filled():
+            actual += 1
+
+        return expected == actual
 
     def any(self):
         for row in self.filled():
-            if row[-1]:
-                return True
+            return True
 
         return False
 
@@ -102,6 +117,67 @@ class SparseTensorView(Tensor):
 
     def copy(self):
         return self._copy(self.dtype)
+
+    def product(self, axis):
+        assert axis < self.ndim
+
+        shape = list(self.shape)
+        del shape[axis]
+        product = SparseTensor(shape, self.dtype)
+        visited = SparseTensor(shape, np.bool)
+
+        for row in self.filled():
+            elide = list(row[:-1])
+            elide[axis] = slice(None)
+            elide = tuple(elide)
+            if not self[elide].all():
+                continue
+
+            if axis == 0:
+                coord = row[1:-1]
+                if visited[coord]:
+                    product[coord] *= row[-1]
+                else:
+                    visited[coord] = True
+                    product[coord] = row[-1]
+            elif axis == self.ndim - 1:
+                coord = row[:-2]
+                if visited[coord]:
+                    product[coord] *= row[-1]
+                else:
+                    visited[coord] = True
+                    product[coord] = row[-1]
+            else:
+                l = row[:axis]
+                r = row[(axis + 1):-1]
+                if visited[l][r]:
+                    product[l][r] *= row[-1]
+                else:
+                    visited[l][r] = True
+                    product[l][r] = row[-1]
+
+        return product
+
+    def sum(self, axis):
+        assert axis < self.ndim
+
+        shape = list(self.shape)
+        del shape[axis]
+        summed = SparseTensor(shape, self.dtype)
+
+        if axis == 0:
+            for row in self.filled():
+                summed[row[1:-1]] += row[-1]
+        elif axis == self.ndim - 1:
+            for row in self.filled():
+                summed[row[:-2]] += row[-1]
+        else:
+            for row in self.filled():
+                coord = row[:-1]
+                val = row[-1]
+                summed[coord[:axis]][coord[(axis + 1):]] += val
+
+        return summed
 
     def to_dense(self):
         dense = np.zeros(self.shape, self.dtype)

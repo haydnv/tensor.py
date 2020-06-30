@@ -99,9 +99,37 @@ def test_getitem():
     assert (sparse[coord].to_dense() == dense[coord]).all()
 
 
+def test_sum():
+    dims = [3, 5, 2, 4]
+    sparse = SparseTensor(dims)
+    ref = np.zeros(dims)
+    assert (sparse.sum(2).to_dense() == np.sum(ref, 2)).all()
+
+    sparse[:, :, 0, slice(None, None, 3)] = 2
+    ref[:, :, 0, slice(None, None, 3)] = 2
+
+    for axis in range(4):
+        assert (sparse.sum(axis).to_dense() == np.sum(ref, axis)).all()
+
+
+def test_product():
+    dims = [3, 5, 2, 4]
+    sparse = SparseTensor(dims)
+    ref = np.zeros(dims)
+    assert (sparse.product(2).to_dense() == np.product(ref, 2)).all()
+
+    sparse[:, :, 0, slice(None, None, 3)] = 2
+    ref[:, :, 0, slice(None, None, 3)] = 2
+
+    for axis in range(4):
+        assert (sparse.product(axis).to_dense() == np.product(ref, axis)).all()
+
+
 if __name__ == "__main__":
     test_eq()
     test_setitem()
     test_getitem()
+    test_sum()
+    test_product()
     print("PASS")
 

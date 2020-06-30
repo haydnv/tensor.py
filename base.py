@@ -93,7 +93,13 @@ class Tensor(object):
     def expand_dims(self, axis):
         raise NotImplementedError
 
+    def product(self, _axis):
+        raise NotImplementedError
+
     def shuffle(self, _axis):
+        raise NotImplementedError
+
+    def sum(self, _axis):
         raise NotImplementedError
 
     def transpose(self, permutation=None):
