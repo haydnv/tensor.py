@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from base import Broadcast, Tensor
+from base import Broadcast, Expanded, Tensor
 
 
 class SparseTensorView(Tensor):
@@ -117,6 +117,9 @@ class SparseTensorView(Tensor):
 
     def copy(self):
         return self._copy(self.dtype)
+
+    def expand_dims(self, axis):
+        return SparseExpanded(self, axis)
 
     def product(self, axis):
         assert axis < self.ndim
@@ -306,16 +309,28 @@ class SparseTensor(SparseTensorView):
         return table_slice
 
 
-class SparseBroadcast(Broadcast, SparseTensorView):
+class SparseRebase(SparseTensorView):
     def __init__(self, source, shape):
-        Broadcast.__init__(self, source, shape)
-        SparseTensorView.__init__(self, shape, source.dtype)
+        super().__init__(shape, source.dtype)
+        self._source = source
 
     def filled(self):
         for row in self._source.filled():
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
+
+
+class SparseBroadcast(Broadcast, SparseRebase):
+    def __init__(self, source, shape):
+        Broadcast.__init__(self, source, shape)
+        SparseRebase.__init__(self, source, shape)
+
+
+class SparseExpanded(Expanded, SparseRebase):
+    def __init__(self, source, axis):
+        Expanded.__init__(self, source, axis)
+        SparseRebase.__init__(self, source, self.shape)
 
 
 class SparseTensorSlice(SparseTensorView):

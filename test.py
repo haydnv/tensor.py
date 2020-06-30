@@ -125,6 +125,20 @@ def test_product():
         assert (sparse.product(axis).to_dense() == np.product(ref, axis)).all()
 
 
+def test_expand_dims():
+    dims = [3, 1, 5, 2]
+    sparse = SparseTensor(dims)
+    ref = np.zeros(dims)
+
+    sparse[1, slice(None), slice(1, 5, 2), (1, 2)] = 1
+    assert (sparse.to_dense() == ref).all()
+
+    for axis in [3, 1, 0, 6]:
+        sparse = sparse.expand_dims(axis)
+        ref = ref.expand_dims(axis)
+        assert (sparse.to_dense() == ref).all()
+
+
 if __name__ == "__main__":
     test_eq()
     test_setitem()

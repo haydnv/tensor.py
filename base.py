@@ -162,3 +162,13 @@ class Broadcast(Rebase):
 
         return tuple(coord)
 
+
+class Expanded(Rebase):
+    def __init__(self, source, axis):
+        if axis >= source.ndim:
+            raise ValueError
+
+        shape = list(source.shape)
+        shape.insert(axis, 1)
+        Rebase.__init__(self, source, shape)
+
