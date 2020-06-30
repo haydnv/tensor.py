@@ -47,7 +47,7 @@ class Tensor(object):
 
         subtraction = Tensor(left.shape)
         for coord in itertools.product(*[range(dim) for dim in left.shape]):
-            subtraction[coord] = left[coord] - right[shape]
+            subtraction[coord] = left[coord] - right[coord]
 
         return subtraction
 

@@ -11,92 +11,11 @@ class SparseTensorView(Tensor):
         super().__init__(shape, dtype)
         self._default = default
 
-    def broadcast(self, shape):
-        return SparseBroadcast(self, shape)
-
-    def to_dense(self):
-        dense = np.ones(self.shape, self.dtype) * self._default
-        for entry in self.filled():
-            coord = entry[:-1]
-            value = entry[-1]
-            dense[coord] = value
-
-        return dense
-
-
-class SparseTensor(SparseTensorView):
-    def __init__(self, shape, dtype=np.int32, default=0):
-        super().__init__(tuple(shape), dtype, default)
-
-        self._table = Table(Index(Schema(
-            [(i, int) for i in range(self.ndim)],
-            [("value", self.dtype)])))
-
-        for i in range(self.ndim):
-            self._table.add_index(str(i), [i])
-
-    def __getitem__(self, match):
-        match = validate_match(match, self.shape)
-
-        if len(match) == self.ndim and all(isinstance(c, int) for c in match):
-            if any(abs(match[axis]) > self.shape[axis] for axis in range(self.ndim)):
-                raise IndexError
-
-            match = [
-                match[i] if match[i] >= 0 else self.shape[i] + match[i]
-                for i in range(self.ndim)]
-            selector = dict(zip(range(len(match)), match))
-            for (value,) in self._table.slice(selector).select(["value"]):
-                return value
-
-            return self._default
-        else:
-            return SparseTensorSlice(self, match)
-
     def __invert__(self):
         inverted = SparseTensor(self.shape, np.bool, not self._default)
         for row in self.filled():
             inverted[row[:-1]] = not row[-1]
         return inverted
-
-    def __setitem__(self, match, value):
-        match = validate_match(match, self.shape)
-
-        if isinstance(value, SparseTensorView) and value._default == self._default:
-            dest = self[match]
-            if dest.shape != value.shape:
-                value = value.broadcast(dest.shape)
-
-            for row in value.filled():
-                dest[row[:-1]] = row[-1]
-
-        elif isinstance(value, Tensor):
-            Tensor.__setitem__(self, match, value)
-        elif value == self._default:
-            self._delete_filled(match)
-        else:
-            affected = []
-            for axis in range(len(match)):
-                if match[axis] is None:
-                    affected.append(range(self.shape[axis]))
-                elif isinstance(match[axis], slice):
-                    s = match[axis]
-                    affected.append(range(s.start, s.stop, s.step))
-                elif isinstance(match[axis], tuple):
-                    affected.append(match[axis])
-                elif match[axis] < 0:
-                    affected.append([self.shape[axis] + match[axis]])
-                else:
-                    affected.append([match[axis]])
-
-            for axis in range(len(match), self.ndim):
-                affected.append(range(self.shape[axis]))
-
-            value = self.dtype(value)
-            for coord in itertools.product(*affected):
-                self._table.upsert(coord, (value,))
-
-            self._table.rebalance()
 
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
@@ -165,14 +84,20 @@ class SparseTensor(SparseTensorView):
 
         return self._copy(cast_to)
 
+    def broadcast(self, shape):
+        return SparseBroadcast(self, shape)
+
     def copy(self):
         return self._copy(self.dtype)
 
-    def filled(self, match=None):
-        if match is None:
-            yield from self._table
-        else:
-            yield from self._slice_table(match)
+    def to_dense(self):
+        dense = np.ones(self.shape, self.dtype) * self._default
+        for entry in self.filled():
+            coord = entry[:-1]
+            value = entry[-1]
+            dense[coord] = value
+
+        return dense
 
     def _copy(self, dtype):
         copied = SparseTensor(self.shape, dtype, dtype(self._default))
@@ -181,6 +106,81 @@ class SparseTensor(SparseTensorView):
             copied[coord] = dtype(row[-1])
 
         return copied
+
+
+class SparseTensor(SparseTensorView):
+    def __init__(self, shape, dtype=np.int32, default=0):
+        super().__init__(tuple(shape), dtype, default)
+
+        self._table = Table(Index(Schema(
+            [(i, int) for i in range(self.ndim)],
+            [("value", self.dtype)])))
+
+        for i in range(self.ndim):
+            self._table.add_index(str(i), [i])
+
+    def __getitem__(self, match):
+        match = validate_match(match, self.shape)
+
+        if len(match) == self.ndim and all(isinstance(c, int) for c in match):
+            if any(abs(match[axis]) > self.shape[axis] for axis in range(self.ndim)):
+                raise IndexError
+
+            match = [
+                match[i] if match[i] >= 0 else self.shape[i] + match[i]
+                for i in range(self.ndim)]
+            selector = dict(zip(range(len(match)), match))
+            for (value,) in self._table.slice(selector).select(["value"]):
+                return value
+
+            return self._default
+        else:
+            return SparseTensorSlice(self, match)
+
+    def __setitem__(self, match, value):
+        match = validate_match(match, self.shape)
+
+        if isinstance(value, SparseTensorView) and value._default == self._default:
+            dest = self[match]
+            if dest.shape != value.shape:
+                value = value.broadcast(dest.shape)
+
+            for row in value.filled():
+                dest[row[:-1]] = row[-1]
+
+        elif isinstance(value, Tensor):
+            Tensor.__setitem__(self, match, value)
+        elif value == self._default:
+            self._delete_filled(match)
+        else:
+            affected = []
+            for axis in range(len(match)):
+                if match[axis] is None:
+                    affected.append(range(self.shape[axis]))
+                elif isinstance(match[axis], slice):
+                    s = match[axis]
+                    affected.append(range(s.start, s.stop, s.step))
+                elif isinstance(match[axis], tuple):
+                    affected.append(match[axis])
+                elif match[axis] < 0:
+                    affected.append([self.shape[axis] + match[axis]])
+                else:
+                    affected.append([match[axis]])
+
+            for axis in range(len(match), self.ndim):
+                affected.append(range(self.shape[axis]))
+
+            value = self.dtype(value)
+            for coord in itertools.product(*affected):
+                self._table.upsert(coord, (value,))
+
+            self._table.rebalance()
+
+    def filled(self, match=None):
+        if match is None:
+            yield from self._table
+        else:
+            yield from self._slice_table(match)
 
     def _delete_filled(self, match):
         self._slice_table(match).delete()
