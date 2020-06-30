@@ -3,6 +3,20 @@ import numpy as np
 from sparse import SparseTensor
 
 
+def test_eq():
+    dims = [3]
+    a = SparseTensor(dims)
+    b = SparseTensor(dims)
+    assert (a == b).all()
+
+    dims = [5, 7, 1, 12]
+    a = SparseTensor(dims)
+    b = SparseTensor(dims)
+    a[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
+    b[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
+    assert (a == b).all()
+
+
 def test_setitem():
     dims = [7, 10]
     sparse = SparseTensor(dims)
@@ -102,6 +116,7 @@ def test_sparse_with_default():
 
 
 if __name__ == "__main__":
+    test_eq()
     test_setitem()
     test_getitem()
     test_sparse_with_default()

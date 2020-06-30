@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 
 class Tensor(object):
@@ -12,9 +13,6 @@ class Tensor(object):
         self.shape = tuple(shape)
         self.ndim = len(shape)
 
-    def __bool__(self, other):
-        return self.as_type(np.bool)
-
     def __eq__(self, other):
         if self.shape != other.shape:
             return False
@@ -22,7 +20,7 @@ class Tensor(object):
         if self.dtype == np.bool and other.dtype == np.bool:
             return self ^ other
 
-        return not (self - other)
+        return ~ (self - other)
 
     def __getitem__(self, _match):
         raise NotImplementedError
@@ -40,16 +38,21 @@ class Tensor(object):
         if right.dtype == np.bool:
             right = right.as_type(np.uint8)
 
-        if right.ndim > left.ndim:
+        if left.shape == right.shape:
+            pass
+        elif right.ndim > left.ndim:
             left = left.broadcast(right.shape)
         else:
             right = right.broadcast(left.shape)
 
         subtraction = Tensor(left.shape)
-        for coord in itertools.product(*left.shape):
+        for coord in itertools.product(*[range(dim) for dim in left.shape]):
             subtraction[coord] = left[coord] - right[shape]
 
         return subtraction
+
+    def __str__(self):
+        return "{}".format(self.to_dense())
 
     def __xor__(self, other):
         this = bool(self)
@@ -62,10 +65,24 @@ class Tensor(object):
             that = that.broadcast(this.shape)
 
         xor = Tensor(this.shape, np.bool)
-        for coord in itertools.product(*this.shape):
+        for coord in itertools.product(*[range(dim) for dim in this.shape]):
             xor[coord] = this[coord] ^ that[coord]
 
         return xor
+
+    def all(self):
+        for coord in itertools.product(*[range(dim) for dim in self.shape]):
+            if not self[coord]:
+                return False
+
+        return True
+
+    def any(self):
+        for coord in itertools.product(*[range(dim) for dim in self.shape]):
+            if self[coord]:
+                return True
+
+        return False
 
     def as_type(self):
         raise NotImplementedError

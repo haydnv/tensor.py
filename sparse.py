@@ -53,6 +53,12 @@ class SparseTensor(SparseTensorView):
         else:
             return SparseTensorSlice(self, match)
 
+    def __invert__(self):
+        inverted = SparseTensor(self.shape, np.bool, not self._default)
+        for row in self.filled():
+            inverted[row[:-1]] = not row[-1]
+        return inverted
+
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
 
@@ -103,12 +109,14 @@ class SparseTensor(SparseTensorView):
             if right.dtype == np.bool:
                 right = right.as_type(np.uint8)
 
-            if right.ndim > left.ndim:
+            if left.shape == right.shape:
+                pass
+            elif right.ndim > left.ndim:
                 left = left.broadcast(right.shape)
             else:
                 right = right.broadcast(left.shape)
 
-            subtraction = SparseTensor(left.dtype)
+            subtraction = SparseTensor(left.shape, left.dtype)
 
             for row in left.filled():
                 coord = row[:-1]
