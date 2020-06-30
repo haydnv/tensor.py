@@ -31,7 +31,25 @@ class Tensor(object):
         raise NotImplementedError
 
     def __sub__(self, other):
-        raise NotImplementedError
+        left = self
+        right = other
+
+        if left.dtype == np.bool:
+            left = left.as_type(np.uint8)
+
+        if right.dtype == np.bool:
+            right = right.as_type(np.uint8)
+
+        if right.ndim > left.ndim:
+            left = left.broadcast(right.shape)
+        else:
+            right = right.broadcast(left.shape)
+
+        subtraction = Tensor(left.shape)
+        for coord in itertools.product(*left.shape):
+            subtraction[coord] = left[coord] - right[shape]
+
+        return subtraction
 
     def __xor__(self, other):
         this = bool(self)

@@ -93,7 +93,36 @@ class SparseTensor(SparseTensorView):
             self._table.rebalance()
 
     def __sub__(self, other):
-        raise NotImplementedError
+        if isinstance(other, SparseTensorView):
+            left = self
+            right = other
+
+            if left.dtype == np.bool:
+                left = left.as_type(np.uint8)
+
+            if right.dtype == np.bool:
+                right = right.as_type(np.uint8)
+
+            if right.ndim > left.ndim:
+                left = left.broadcast(right.shape)
+            else:
+                right = right.broadcast(left.shape)
+
+            subtraction = SparseTensor(left.dtype)
+
+            for row in left.filled():
+                coord = row[:-1]
+                val = row[-1]
+                subtraction[coord] = val - right[coord]
+
+            for row in right.filled():
+                coord = row[:-1]
+                val = row[-1]
+                subtraction[coord] = left[coord] - val
+
+            return subtraction
+        else:
+            Tensor.__sub__(self, other)
 
     def __xor__(self, other):
         if isinstance(other, SparseTensorView):
@@ -120,7 +149,7 @@ class SparseTensor(SparseTensorView):
 
             return xor
         else:
-            Tensor.__xor__(this, that)
+            Tensor.__xor__(self, other)
 
     def as_type(self, cast_to):
         if cast_to == self.dtype:
