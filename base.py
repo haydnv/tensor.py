@@ -34,7 +34,20 @@ class Tensor(object):
         raise NotImplementedError
 
     def __xor__(self, other):
-        raise NotImplementedError
+        this = bool(self)
+        that = bool(other)
+
+        if that.ndim > this.ndim:
+            return that ^ this
+
+        if this.shape != that.shape:
+            that = that.broadcast(this.shape)
+
+        xor = Tensor(this.shape, np.bool)
+        for coord in itertools.product(*this.shape):
+            xor[coord] = this[coord] ^ that[coord]
+
+        return xor
 
     def as_type(self):
         raise NotImplementedError

@@ -96,7 +96,31 @@ class SparseTensor(SparseTensorView):
         raise NotImplementedError
 
     def __xor__(self, other):
-        raise NotImplementedError
+        if isinstance(other, SparseTensorView):
+            if other.ndim > self.ndim:
+                return other ^ self
+
+            this = bool(self)
+            that = bool(other)
+
+            if this.shape != that.shape:
+                that = that.broadcast(self.shape)
+
+            xor = SparseTensor(this.shape, np.bool, (this._default ^ that._default))
+
+            for row in this.filled():
+                coord = row[:-1]
+                val = row[-1]
+                xor[coord] = val ^ that[coord]
+
+            for row in that.filled():
+                coord = row[:-1]
+                val = row[-1]
+                xor[coord] = this[coord] ^ val
+
+            return xor
+        else:
+            Tensor.__xor__(this, that)
 
     def as_type(self, cast_to):
         if cast_to == self.dtype:
