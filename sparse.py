@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from base import Broadcast, Expansion, Tensor
+from base import Broadcast, Expansion, Permutation, Tensor
 from base import validate_match, validate_slice, validate_tuple
 
 
@@ -183,6 +183,9 @@ class SparseTensorView(Tensor):
 
         return summed
 
+    def transpose(self, permutation=None):
+        return SparsePermutation(self, permutation)
+
     def to_dense(self):
         dense = np.zeros(self.shape, self.dtype)
         for entry in self.filled():
@@ -331,6 +334,12 @@ class SparseBroadcast(Broadcast, SparseRebase):
 class SparseExpansion(Expansion, SparseRebase):
     def __init__(self, source, axis):
         Expansion.__init__(self, source, axis)
+        SparseRebase.__init__(self, source, self.shape)
+
+
+class SparsePermutation(Permutation, SparseRebase):
+    def __init__(self, source, permutation=None):
+        Permutation.__init__(self, source, permutation)
         SparseRebase.__init__(self, source, self.shape)
 
 
