@@ -12,15 +12,9 @@ class Tensor(object):
         self.dtype = dtype
         self.shape = tuple(shape)
         self.ndim = len(shape)
-
-    def __eq__(self, other):
-        if self.shape != other.shape:
-            return False
-
-        if self.dtype == np.bool and other.dtype == np.bool:
-            return self ^ other
-
-        return ~ (self - other)
+    
+    def __eq__(self, _other):
+        raise NotImplementedError
 
     def __getitem__(self, _match):
         raise NotImplementedError
