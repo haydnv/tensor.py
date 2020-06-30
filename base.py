@@ -156,37 +156,3 @@ class Broadcast(Rebase):
 
         return tuple(coord)
 
-
-class Permutation(Rebase):
-    def __init__(self, source, permutation):
-        assert source.ndim == len(permutation)
-        super().__init__([source.shape[axis] for axis in permutation])
-
-        self._permute_from = dict(zip(range(self.ndim), permutation))
-        self._permute_to = {
-            dest_axis: source_axis
-            for (source_axis, dest_axis) in self._permute_from.items()}
-
-    def __getitem__(self, match):
-        raise NotImplementedError
-
-    def _invert_coord(self, coord):
-        if not isinstance(coord, tuple):
-            coord = (coord,)
-
-        match = list(coord)
-        while len(match) < self.ndim:
-            match.append(slice(None))
-
-        return tuple(match[self._permute_from[axis]] for axis in range(self.ndim))
-
-    def _map_coord(self, coord):
-        if not isinstance(coord, tuple):
-            coord = (coord,)
-
-        match = list(coord)
-        while len(match) < self.ndim:
-            match.append(slice(None))
-
-        return tuple(match[self._permute_to[axis]] for axis in range(self.ndim))
-
