@@ -5,6 +5,7 @@ import numpy as np
 
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expanded, Tensor
+from base import validate_match, validate_slice, validate_tuple
 
 
 class SparseTensorView(Tensor):
@@ -455,59 +456,4 @@ class SparseTensorSlice(SparseTensorView):
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
-
-
-def validate_match(match, shape):
-    if not isinstance(match, tuple):
-        match = (match,)
-
-    assert len(match) <= len(shape)
-
-    match = list(match)
-    for axis in range(len(match)):
-        if match[axis] is None:
-            pass
-        elif isinstance(match[axis], slice):
-            match[axis] = validate_slice(match[axis], shape[axis])
-        elif isinstance(match[axis], tuple) or isinstance(match[axis], list):
-            match[axis] = validate_tuple(match[axis], shape[axis])
-        elif match[axis] < 0:
-            assert abs(match[axis]) < shape[axis]
-        else:
-            assert match[axis] < shape[axis]
-
-    return tuple(match)
-
-
-def validate_slice(s, dim):
-    if s.start is None:
-        start = 0
-    elif s.start < 0:
-        start = dim + s.start
-    else:
-        start = s.start
-
-    if s.stop is None:
-        stop = dim
-    elif s.stop < 0:
-        stop = dim + s.stop
-    else:
-        stop = s.stop
-
-    step = s.step if s.step else 1
-
-    return slice(start, stop, step)
-
-
-def validate_tuple(t, dim):
-    if not t:
-        raise IndexError
-
-    if not all(isinstance(t[i], int) for i in range(len(t))):
-        raise IndexError
-
-    if any([abs(t[i]) > dim for i in range(len(t))]):
-        raise IndexError
-
-    return tuple(t)
 

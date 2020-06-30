@@ -91,7 +91,7 @@ class Tensor(object):
         raise NotImplementedError
 
     def expand_dims(self, axis):
-        raise NotImplementedError
+        return Expanded(self, axis)
 
     def product(self, _axis):
         raise NotImplementedError
@@ -171,4 +171,81 @@ class Expanded(Rebase):
         shape = list(source.shape)
         shape.insert(axis, 1)
         Rebase.__init__(self, source, shape)
+
+        self._expand = axis
+
+    def _invert_coord(self, coord):
+        validate_match(coord, self.shape)
+
+        if len(coord) < self._expand:
+            return match
+        else:
+            coord = list(coord)
+            del coord[self._expand]
+            return tuple(coord)
+
+    def _map_coord(self, source_coord):
+        validate_match(source_coord, self._source.shape)
+
+        if len(source_coord) < self._expand:
+            return source_coord
+        else:
+            coord = list(source_coord)
+            coord.insert(self._expand, 0)
+            return tuple(coord)
+
+
+def validate_match(match, shape):
+    if not isinstance(match, tuple):
+        match = (match,)
+
+    assert len(match) <= len(shape)
+
+    match = list(match)
+    for axis in range(len(match)):
+        if match[axis] is None:
+            pass
+        elif isinstance(match[axis], slice):
+            match[axis] = validate_slice(match[axis], shape[axis])
+        elif isinstance(match[axis], tuple) or isinstance(match[axis], list):
+            match[axis] = validate_tuple(match[axis], shape[axis])
+        elif match[axis] < 0:
+            assert abs(match[axis]) < shape[axis]
+        else:
+            assert match[axis] < shape[axis]
+
+    return tuple(match)
+
+
+def validate_slice(s, dim):
+    if s.start is None:
+        start = 0
+    elif s.start < 0:
+        start = dim + s.start
+    else:
+        start = s.start
+
+    if s.stop is None:
+        stop = dim
+    elif s.stop < 0:
+        stop = dim + s.stop
+    else:
+        stop = s.stop
+
+    step = s.step if s.step else 1
+
+    return slice(start, stop, step)
+
+
+def validate_tuple(t, dim):
+    if not t:
+        raise IndexError
+
+    if not all(isinstance(t[i], int) for i in range(len(t))):
+        raise IndexError
+
+    if any([abs(t[i]) > dim for i in range(len(t))]):
+        raise IndexError
+
+    return tuple(t)
 

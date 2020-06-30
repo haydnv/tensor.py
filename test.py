@@ -130,12 +130,13 @@ def test_expand_dims():
     sparse = SparseTensor(dims)
     ref = np.zeros(dims)
 
-    sparse[1, slice(None), slice(1, 5, 2), (1, 2)] = 1
+    sparse[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
+    ref[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
     assert (sparse.to_dense() == ref).all()
 
     for axis in [3, 1, 0, 6]:
         sparse = sparse.expand_dims(axis)
-        ref = ref.expand_dims(axis)
+        ref = np.expand_dims(ref, axis)
         assert (sparse.to_dense() == ref).all()
 
 
@@ -145,5 +146,6 @@ if __name__ == "__main__":
     test_getitem()
     test_sum()
     test_product()
+    test_expand_dims()
     print("PASS")
 
