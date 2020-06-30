@@ -85,7 +85,7 @@ class Tensor(object):
         raise NotImplementedError
 
     def expand_dims(self, axis):
-        return Expanded(self, axis)
+        return Expansion(self, axis)
 
     def product(self, _axis):
         raise NotImplementedError
@@ -157,7 +157,7 @@ class Broadcast(Rebase):
         return tuple(coord)
 
 
-class Expanded(Rebase):
+class Expansion(Rebase):
     def __init__(self, source, axis):
         if axis >= source.ndim:
             raise ValueError
