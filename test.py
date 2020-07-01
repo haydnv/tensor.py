@@ -99,6 +99,12 @@ def test_getitem():
     assert (sparse[coord].to_dense() == dense[coord]).all()
 
 
+def test_broadcast():
+    a = SparseTensor([2, 1, 3])
+    b = SparseTensor([2, 3, 1])
+    assert (a.broadcast(b.shape) == b.broadcast(a.shape)).all()
+
+
 def test_sum():
     dims = [3, 5, 2, 4]
     sparse = SparseTensor(dims)
@@ -134,10 +140,14 @@ def test_expand_dims():
     ref[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
     assert (sparse.to_dense() == ref).all()
 
-    for axis in [3, 1, 0, 6]:
+    for axis in [3, 1, 0]:
         sparse = sparse.expand_dims(axis)
         ref = np.expand_dims(ref, axis)
         assert (sparse.to_dense() == ref).all()
+
+    sparse = sparse.expand_dims(sparse.ndim)
+    ref = np.expand_dims(ref, ref.ndim)
+    assert (sparse.to_dense() == ref).all()
 
 
 def test_transpose():
@@ -188,9 +198,11 @@ if __name__ == "__main__":
     test_eq()
     test_setitem()
     test_getitem()
+    test_broadcast()
     test_sum()
     test_product()
     test_expand_dims()
     test_transpose()
     test_multiply()
     print("PASS")
+

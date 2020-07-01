@@ -137,7 +137,7 @@ class Broadcast(Rebase):
         for axis in range(offset, self.ndim):
             if self.shape[axis] == source.shape[axis - offset]:
                 broadcast[axis] = False
-            elif self.shape[axis] != 1 and source.shape[axis - offset] == 1:
+            elif self.shape[axis] == 1 or source.shape[axis - offset] == 1:
                 broadcast[axis] = True
             else:
                 print(self.shape, source.shape, axis, offset)
