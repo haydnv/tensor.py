@@ -5,7 +5,7 @@ import numpy as np
 
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expansion, Permutation, Tensor
-from base import validate_match, validate_slice, validate_tuple
+from base import affected, validate_match, validate_slice, validate_tuple
 
 
 class SparseTensorView(Tensor):
@@ -274,25 +274,10 @@ class SparseTensor(SparseTensorView):
         elif value == self.dtype(0):
             self._delete_filled(match)
         else:
-            affected = []
-            for axis in range(len(match)):
-                if match[axis] is None:
-                    affected.append(range(self.shape[axis]))
-                elif isinstance(match[axis], slice):
-                    s = match[axis]
-                    affected.append(range(s.start, s.stop, s.step))
-                elif isinstance(match[axis], tuple):
-                    affected.append(match[axis])
-                elif match[axis] < 0:
-                    affected.append([self.shape[axis] + match[axis]])
-                else:
-                    affected.append([match[axis]])
-
-            for axis in range(len(match), self.ndim):
-                affected.append(range(self.shape[axis]))
+            affected_range = affected(match, self.shape)
 
             value = self.dtype(value)
-            for coord in itertools.product(*affected):
+            for coord in itertools.product(*affected_range):
                 self._table.upsert(coord, (value,))
 
             self._table.rebalance()

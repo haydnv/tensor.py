@@ -234,6 +234,26 @@ class Permutation(Rebase):
         return tuple(coord[self._permute_from[axis]] for axis in range(len(coord)))
 
 
+def affected(match, shape):
+    affected = []
+    for axis in range(len(match)):
+        if match[axis] is None:
+            affected.append(range(shape[axis]))
+        elif isinstance(match[axis], slice):
+            s = match[axis]
+            affected.append(range(s.start, s.stop, s.step))
+        elif isinstance(match[axis], tuple):
+            affected.append(match[axis])
+        elif match[axis] < 0:
+            affected.append([shape[axis] + match[axis]])
+        else:
+            affected.append([match[axis]])
+
+    for axis in range(len(match), len(shape)):
+        affected.append(range(shape[axis]))
+
+    return affected
+
 def validate_match(match, shape):
     if not isinstance(match, tuple):
         match = (match,)
