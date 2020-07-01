@@ -39,8 +39,9 @@ class SparseTensorView(Tensor):
         elif not isinstance(other, SparseTensorView):
             return Tensor.__mul__(self, other)
 
-        this = self
-        that = other if other.shape == this.shape else other.broadcast(this.shape)
+        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+        this = self.broadcast(shape)
+        that = other.broadcast(shape)
 
         multiplied = SparseTensor(this.shape, this.dtype)
         # TODO: optimize by iterating over the tensor with fewer elements
@@ -135,6 +136,9 @@ class SparseTensorView(Tensor):
         return self._copy(cast_to)
 
     def broadcast(self, shape):
+        if shape == self.shape:
+            return self
+
         return SparseBroadcast(self, shape)
 
     def copy(self):
@@ -351,6 +355,22 @@ class SparseBroadcast(Broadcast, SparseRebase):
         Broadcast.__init__(self, source, shape)
         SparseRebase.__init__(self, source, shape)
 
+    def filled(self):
+        for row in self._source.filled():
+            coord = self._map_coord(row[:-1])
+            coord_range = []
+            for axis in range(self.ndim):
+                c = coord[axis]
+                if isinstance(c, slice):
+                    c = validate_slice(c, self.shape[axis])
+                    coord_range.append(range(c.start, c.stop, c.step))
+                elif isinstance(c, tuple):
+                    coord_range.append(list(c))
+                else:
+                    coord_range.append([c])
+
+            for broadcast_coord in itertools.product(*coord_range):
+                yield tuple(broadcast_coord) + (row[-1],)
 
 class SparseExpansion(Expansion, SparseRebase):
     def __init__(self, source, axis):

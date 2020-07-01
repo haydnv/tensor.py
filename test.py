@@ -112,7 +112,10 @@ def test_broadcast():
     b[0] = 3
     ref_b[0] = 3
 
-    assert ((a * b).to_dense() == (ref_a * ref_b)).all()
+    a_b = a * b
+    ref_a_b = ref_a * ref_b
+    assert a_b.shape == ref_a_b.shape
+    assert (a_b.to_dense() == ref_a_b).all()
 
 
 def test_sum():

@@ -85,6 +85,12 @@ class Tensor(object):
 
         return False
 
+    def broadcast(self, shape):
+        if shape == self.shape:
+            return self
+
+        return Broadcast(self, shape)
+
     def as_type(self):
         raise NotImplementedError
 
