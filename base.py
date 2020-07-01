@@ -150,7 +150,14 @@ class Broadcast(Rebase):
         raise IndexError
 
     def _invert_coord(self, coord):
-        raise NotImplementedError
+        assert len(coord) <= self.ndim
+
+        source_coord = list(coord)
+        for axis in range(self._offset, len(coord)):
+            if self._broadcast[axis]:
+                source_coord[axis] = 0
+
+        return tuple(source_coord)
 
     def _map_coord(self, source_coord):
         coord = [slice(None) for _ in range(self.ndim)]

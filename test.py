@@ -104,6 +104,16 @@ def test_broadcast():
     b = SparseTensor([2, 3, 1])
     assert (a.broadcast(b.shape) == b.broadcast(a.shape)).all()
 
+    ref_a = np.zeros([2, 1, 3])
+    a[0] = 2
+    ref_a[0] = 2
+
+    ref_b = np.zeros([2, 3, 1])
+    b[0] = 3
+    ref_b[0] = 3
+
+    assert ((a * b).to_dense() == (ref_a * ref_b)).all()
+
 
 def test_sum():
     dims = [3, 5, 2, 4]
