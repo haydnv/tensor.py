@@ -163,6 +163,27 @@ def test_transpose():
     assert (sparse.transpose([0, 2, 1, 3]).to_dense() == np.transpose(ref, [0, 2, 1, 3])).all()
     assert (sparse.transpose([3, 1, 2, 0]).to_dense() == np.transpose(ref, [3, 1, 2, 0])).all()
 
+
+def test_multiply():
+    sparse_a = SparseTensor([3])
+    ref_a = np.zeros([3])
+    sparse_b = SparseTensor([3])
+    ref_b = np.zeros([3])
+
+    sparse_a[0] = 3
+    ref_a[0] = 3
+    sparse_b[0] = 2
+    ref_b[0] = 2
+    assert ((sparse_a * sparse_b).to_dense() == ref_a * ref_b).all()
+
+    sparse = SparseTensor([2, 5])
+    dense = np.zeros([2, 5])
+    sparse[0] = 1
+    dense[0] = 1
+
+    assert ((sparse * 5).to_dense() == (dense * 5)).all()
+
+
 if __name__ == "__main__":
     test_eq()
     test_setitem()
@@ -171,5 +192,5 @@ if __name__ == "__main__":
     test_product()
     test_expand_dims()
     test_transpose()
+    test_multiply()
     print("PASS")
-

@@ -13,11 +13,17 @@ class Tensor(object):
         self.dtype = dtype
         self.shape = tuple(shape)
         self.ndim = len(shape)
-    
+
     def __eq__(self, _other):
         raise NotImplementedError
 
     def __getitem__(self, _match):
+        raise NotImplementedError
+
+    def __mul__(self, other):
+        if other.ndim > self.ndim:
+            return other * self
+
         raise NotImplementedError
 
     def __setitem__(self, _match, _value):
@@ -157,7 +163,7 @@ class Broadcast(Rebase):
 
 class Expansion(Rebase):
     def __init__(self, source, axis):
-        if axis >= source.ndim:
+        if axis > source.ndim:
             raise ValueError
 
         shape = list(source.shape)

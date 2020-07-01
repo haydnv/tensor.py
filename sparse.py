@@ -29,6 +29,27 @@ class SparseTensorView(Tensor):
         else:
             return Tensor.__eq__(other, self)
 
+    def __mul__(self, other):
+        if not isinstance(other, Tensor) and np.array(other).shape == tuple():
+            multiplied = SparseTensor(self.shape)
+            for row in self.filled():
+                multiplied[row[:-1]] = self[row[:-1]] * other
+            return multiplied
+
+        elif not isinstance(other, SparseTensorView):
+            return Tensor.__mul__(self, other)
+
+        this = self
+        that = other if other.shape == this.shape else other.broadcast(this.shape)
+
+        multiplied = SparseTensor(this.shape, this.dtype)
+        # TODO: optimize by iterating over the tensor with fewer elements
+        for row in this.filled():
+            coord = row[:-1]
+            multiplied[coord] = this[coord] * that[coord]
+
+        return multiplied
+
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
             left = self
