@@ -3,7 +3,7 @@ import math
 import numpy as np
 import sys
 
-from base import Broadcast, Rebase, Tensor, TensorSlice
+from base import Broadcast, Expansion, Rebase, Tensor, TensorSlice
 from base import affected, product, validate_match
 
 
@@ -87,6 +87,9 @@ class BlockTensorView(Tensor):
             return self
 
         return BlockTensorBroadcast(self, shape)
+
+    def expand_dims(self, axis):
+        return BlockTensorExpansion(self, axis)
 
     def product(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
@@ -188,9 +191,8 @@ class BlockTensor(BlockTensorView):
         yield from (block for block in self._blocks)
 
 
-class BlockTensorBroadcast(BlockTensorView, Broadcast):
+class BlockTensorDerived(BlockTensorView):
     def __init__(self, source, shape):
-        Broadcast.__init__(self, source, shape)
         BlockTensorView.__init__(self, shape, source.dtype)
 
     def blocks(self):
@@ -199,15 +201,22 @@ class BlockTensorBroadcast(BlockTensorView, Broadcast):
             yield np.array([self[coord] for coord in coords])
 
 
-class BlockTensorSlice(BlockTensorView, TensorSlice):
+class BlockTensorBroadcast(BlockTensorDerived, Broadcast):
+    def __init__(self, source, shape):
+        Broadcast.__init__(self, source, shape)
+        BlockTensorDerived.__init__(self, source, shape)
+
+
+class BlockTensorExpansion(BlockTensorDerived, Expansion):
+    def __init__(self, source, axis):
+        Expansion.__init__(self, source, axis)
+        BlockTensorDerived.__init__(self, source, self.shape)
+
+
+class BlockTensorSlice(BlockTensorDerived, TensorSlice):
     def __init__(self, source, match):
         TensorSlice.__init__(self, source, match)
-        BlockTensorView.__init__(self, self.shape, source.dtype)
-
-    def blocks(self):
-        coord_range = itertools.product(*[range(dim) for dim in self.shape])
-        for coords in chunk_iter(coord_range, self._source._per_block):
-            yield np.array([self[coord] for coord in coords])
+        BlockTensorDerived.__init__(self, source, self.shape)
 
 
 def chunk_iter(iterable, chunk_size):
