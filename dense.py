@@ -1,11 +1,10 @@
-import functools
 import itertools
 import math
 import numpy as np
 import sys
 
 from base import Broadcast, Rebase, Tensor, TensorSlice
-from base import affected, validate_match
+from base import affected, product, validate_match
 
 
 BLOCK_SIZE = 1000
@@ -23,7 +22,6 @@ class BlockTensorView(Tensor):
 class BlockTensor(BlockTensorView):
     def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
         BlockTensorView.__init__(self, shape, dtype)
-        num_elements = functools.reduce(lambda size, dim: size * dim, shape, 1)
 
         if per_block is None:
             per_block = BLOCK_SIZE // sys.getsizeof(dtype())
@@ -35,10 +33,10 @@ class BlockTensor(BlockTensorView):
         else:
             self._blocks = [
                 np.zeros([per_block], dtype)
-                for _ in range(num_elements // per_block)]
+                for _ in range(self.size // per_block)]
 
-            if num_elements % per_block > 0:
-                self._blocks.append(np.zeros([num_elements % per_block], dtype))
+            if self.size % per_block > 0:
+                self._blocks.append(np.zeros([self.size % per_block], dtype))
 
         self._coord_index = np.array([product(shape[axis + 1:]) for axis in range(self.ndim)])
         self._per_block = per_block
@@ -134,10 +132,4 @@ def chunk_iter(iterable, chunk_size):
 
     if chunk:
         yield chunk
-
-def product(iterable):
-    p = 1
-    for num in iterable:
-        p *= num
-    return p
 

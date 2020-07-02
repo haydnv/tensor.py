@@ -1,11 +1,10 @@
-import functools
 import itertools
 import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expansion, Permutation, Tensor, TensorSlice
-from base import affected, validate_match, validate_slice, validate_tuple
+from base import affected, product, validate_match, validate_slice, validate_tuple
 
 
 class SparseTensorView(Tensor):
@@ -122,7 +121,7 @@ class SparseTensorView(Tensor):
         if not self.shape:
             return True
 
-        expected = functools.reduce(lambda p, a: p * a, self.shape, 1)
+        expected = product(self.shape)
         actual = 0
         for _ in self.filled():
             actual += 1

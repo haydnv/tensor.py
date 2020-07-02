@@ -15,7 +15,7 @@ class Tensor(object):
         self.dtype = dtype
         self.shape = tuple(shape)
         self.ndim = len(shape)
-        self.size = functools.reduce(lambda s, dim: s * dim, shape, 1)
+        self.size = product(shape)
 
     def __eq__(self, _other):
         raise NotImplementedError
@@ -29,8 +29,12 @@ class Tensor(object):
 
         raise NotImplementedError
 
-    def __setitem__(self, _match, _value):
-        raise NotImplementedError
+    def __setitem__(self, match, value):
+        dest = self[match]
+        value = value.broadcast(dest.shape)
+
+        for coord in itertools.product(*[range(dim) for dim in dest.shape]):
+            dest[coord] = value[coord]
 
     def __sub__(self, other):
         left = self
@@ -172,10 +176,12 @@ class Broadcast(Rebase):
     def _invert_coord(self, coord):
         assert len(coord) <= self.ndim
 
-        source_coord = list(coord)
-        for axis in range(self._offset, len(coord)):
-            if self._broadcast[axis]:
-                source_coord[axis] = 0
+        source_coord = []
+        for axis in range(self._source.ndim):
+            if self._broadcast[axis + self._offset]:
+                source_coord.append(0)
+            else:
+                source_coord.append(coord[axis + self._offset])
 
         return tuple(source_coord)
 
@@ -376,6 +382,9 @@ def affected(match, shape):
         affected.append(range(shape[axis]))
 
     return affected
+
+def product(iterable):
+    return functools.reduce(lambda p, i: p * i, iterable, 1)
 
 def validate_match(match, shape):
     if not isinstance(match, tuple):

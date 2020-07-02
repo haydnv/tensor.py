@@ -51,50 +51,65 @@ def test_setitem():
     assert (dense.to_nparray() == ref).all()
 
     sparse_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
+    dense_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
     ref_slice = ref[slice(None, None, 2)][slice(None, -1, 3)]
     assert sparse_slice.shape == ref_slice.shape
+    assert dense_slice.shape == ref_slice.shape
 
     sparse[slice(None, None, 2)][slice(None, None, 3)] = 1
+    dense[slice(None, None, 2)][slice(None, None, 3)] = 1
     ref[slice(None, None, 2)][slice(None, None, 3)] = 1
+    assert (sparse == dense).all()
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     dims = [5, 7, 3, 10]
     sparse = SparseTensor(dims)
-    dense = np.zeros(dims)
+    dense = BlockTensor(dims)
+    ref = np.zeros(dims)
 
     for coord in [(3, 0, 1, 9), (4, 0, 2, 1), (2,)]:
         sparse[coord] = 1
         dense[coord] = 1
-    assert (sparse.to_nparray() == dense).all()
+        ref[coord] = 1
+    assert (sparse == dense).all()
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     zero_out = (2, 0, slice(None), slice(1, -3, 3))
     sparse[zero_out] = 0
     dense[zero_out] = 0
-    assert (sparse.to_nparray() == dense).all()
+    ref[zero_out] = 0
+    assert (sparse == dense).all()
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     update = SparseTensor([3, 1])
     update[2, 0] = 1
 
     sparse[1] = update
-    dense[1] = update.to_nparray()
-    assert (sparse.to_nparray() == dense).all()
+    dense[1] = update
+    ref[1] = update.to_nparray()
+    assert (sparse == dense).all()
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     sparse[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
-    dense[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
-    assert (sparse.to_nparray() == dense).all()
+    ref[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
+    assert (sparse.to_nparray() == ref).all()
 
     sparse[0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    dense[0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    assert (sparse.to_nparray() == dense).all()
+    ref[0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    assert (sparse.to_nparray() == ref).all()
 
     sparse_slice = sparse[0]
-    dense_slice = dense[0]
-    assert (sparse_slice.to_nparray() == dense_slice).all()
+    ref_slice = ref[0]
+    assert (sparse_slice.to_nparray() == ref_slice).all()
 
     sparse_slice = sparse[0, 0, :, :]
-    dense_slice = dense[0, 0, :, :]
-    assert (sparse_slice.to_nparray() == dense_slice).all()
-    assert (sparse.to_nparray() == dense).all()
+    ref_slice = ref[0, 0, :, :]
+    assert (sparse_slice.to_nparray() == ref_slice).all()
+    assert (sparse.to_nparray() == ref).all()
 
 
 def test_getitem():
