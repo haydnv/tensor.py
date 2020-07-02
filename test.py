@@ -118,7 +118,7 @@ def test_setitem():
     sparse_slice = sparse[0, 0, :, :]
     dense_slice = dense[0, 0, :, :]
     ref_slice = ref[0, 0, :, :]
-#    assert (sparse_slice == dense_slice).all()
+    assert (sparse_slice == dense_slice).all()
     assert (sparse_slice.to_nparray() == ref_slice).all()
     assert (dense_slice.to_nparray() == ref_slice).all()
     assert (sparse == dense).all()
