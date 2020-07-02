@@ -4,7 +4,7 @@ import math
 import numpy as np
 import sys
 
-from base import Broadcast, Rebase, Tensor
+from base import Broadcast, Rebase, Tensor, TensorSlice
 from base import affected, validate_match
 
 
@@ -97,12 +97,6 @@ class BlockTensor(BlockTensorView):
                 offsets = block % self._per_block
                 for i, o in zip(indices, offsets):
                     self._blocks[i][o] = value
-
-    def __str__(self):
-        dense = np.zeros(self.shape, self.dtype)
-        for coord in itertools.product(*[range(dim) for dim in self.shape]):
-            dense[coord] = self[coord]
-        return str(dense)
 
     def blocks(self):
         yield from (block for block in self._blocks)

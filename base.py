@@ -55,6 +55,9 @@ class Tensor(object):
 
         return subtraction
 
+    def __str__(self):
+        return str(self.to_nparray())
+
     def __xor__(self, other):
         this = bool(self)
         that = bool(other)
@@ -108,6 +111,12 @@ class Tensor(object):
 
     def sum(self, _axis):
         raise NotImplementedError
+
+    def to_nparray(self):
+        arr = np.zeros(self.shape, self.dtype)
+        for coord in itertools.product(*[range(dim) for dim in self.shape]):
+            arr[coord] = self[coord]
+        return arr
 
     def transpose(self, permutation=None):
         return Permutation(self, permutation)

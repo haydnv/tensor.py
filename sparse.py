@@ -57,9 +57,6 @@ class SparseTensorView(Tensor):
 
         return multiplied
 
-    def __str__(self):
-        return "{}".format(self.to_dense())
-
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
             left = self
@@ -223,7 +220,7 @@ class SparseTensorView(Tensor):
     def transpose(self, permutation=None):
         return SparsePermutation(self, permutation)
 
-    def to_dense(self):
+    def to_nparray(self):
         dense = np.zeros(self.shape, self.dtype)
         for entry in self.filled():
             coord = entry[:-1]
