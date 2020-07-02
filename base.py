@@ -1,5 +1,6 @@
 import functools
 import itertools
+import math
 import numpy as np
 
 
@@ -118,9 +119,15 @@ class Rebase(Tensor):
         self._source = source
 
     def __getitem__(self, coord):
+        if not isinstance(coord, tuple):
+            coord = (coord,)
+
         return self._source[self._invert_coord(coord)]
 
     def __setitem__(self, coord, value):
+        if not isinstance(coord, tuple):
+            coord = (coord,)
+
         self._source[self._invert_coord(coord)] = value
 
     def _invert_coord(self, coord):
@@ -145,7 +152,6 @@ class Broadcast(Rebase):
             elif self.shape[axis] == 1 or source.shape[axis - offset] == 1:
                 broadcast[axis] = True
             else:
-                print(self.shape, source.shape, axis, offset)
                 raise ValueError("cannot broadcast")
 
         self._broadcast = broadcast
@@ -231,6 +237,115 @@ class Permutation(Rebase):
             coord = (coord,)
 
         return tuple(coord[self._permute_from[axis]] for axis in range(len(coord)))
+
+
+class TensorSlice(Rebase):
+    def __init__(self, source, match):
+        match = validate_match(match, source.shape)
+
+        shape = []
+        offset = {}
+        elided = []
+
+        for axis in range(len(match)):
+            if match[axis] is None:
+                shape.append(source.shape[axis])
+                offset[axis] = 0
+            elif isinstance(match[axis], slice):
+                s = match[axis]
+                shape.append(math.ceil((s.stop - s.start) / s.step))
+                offset[axis] = s.start
+            elif isinstance(match[axis], tuple):
+                shape.append(len(match[axis]))
+            else:
+                elided.append(axis)
+
+        for axis in range(len(match), source.ndim):
+            shape.append(source.shape[axis])
+            offset[axis] = 0
+
+        Rebase.__init__(self, source, tuple(shape))
+        self._source = source
+        self._match = match
+        self._elided = elided
+        self._offset = offset
+
+    def _map_coord(self, source_coord):
+        assert len(source_coord) == self._source.ndim
+        dest_coord = []
+        for axis in range(self._source.ndim):
+            if axis in self._elided:
+                pass
+            elif isinstance(source_coord[axis], slice):
+                raise NotImplementedError
+            elif isinstance(source_coord[axis], tuple):
+                dest_coord.append(tuple(c - self._offset[axis] for c in source_coord[axis]))
+            else:
+                dest_coord.append(source_coord[axis] - self._offset[axis])
+
+        for axis in range(len(source_coord), self.ndim):
+            if not axis in self._elided:
+                dest_coord.append(None)
+
+        assert len(dest_coord) == self.ndim
+        return tuple(dest_coord)
+
+    def _invert_coord(self, coord):
+        coord = [
+            coord[i] if i < len(coord) else slice(None)
+            for i in range(self.ndim)]
+
+        source_coord = []
+        for axis in range(self._source.ndim):
+            if axis in self._elided:
+                source_coord.append(self._match[axis])
+                continue
+
+            at = coord.pop(0)
+            if at is None:
+                if axis < len(self._match):
+                    source_coord.append(self._match[axis])
+                else:
+                    source_coord.append(None)
+            elif isinstance(at, slice):
+                if axis < len(self._match):
+                    match_axis = self._match[axis]
+                else:
+                    match_axis = validate_slice(slice(None), self._source.shape[axis])
+
+                if isinstance(match_axis, slice):
+                    if at.start is None:
+                        start = match_axis.start
+                    elif at.start < 0:
+                        start = match_axis.stop + at.start
+                    else:
+                        start = at.start + match_axis.start
+
+                    if at.step is None or at.step == 1:
+                        step = match_axis.step
+                    else:
+                        step = match_axis.step * at.step
+
+                    if at.stop is None:
+                        stop = match_axis.stop
+                    elif at.stop < 0:
+                        stop = match_axis.stop - (match_axis.step * abs(at.stop))
+                    else:
+                        at = validate_slice(at, (match_axis.stop - match_axis.start))
+                        stop = start + (match_axis.step * (at.stop - at.start))
+
+                    source_coord.append(slice(start, stop, step))
+                else:
+                    if at.start != 0:
+                        raise IndexError
+
+                    source_coord.append(match[axis])
+            elif isinstance(at, tuple):
+                source_coord.append(tuple(c + self._offset[axis] for c in at))
+            else:
+                source_coord.append(at + self._offset[axis])
+
+        return tuple(source_coord)
 
 
 def affected(match, shape):

@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from btree.table import Index, Schema, Table
-from base import Broadcast, Expansion, Permutation, Tensor
+from base import Broadcast, Expansion, Permutation, Tensor, TensorSlice
 from base import affected, validate_match, validate_slice, validate_tuple
 
 
@@ -381,122 +381,12 @@ class SparsePermutation(Permutation, SparseRebase):
         SparseRebase.__init__(self, source, self.shape)
 
 
-class SparseTensorSlice(SparseTensorView):
+class SparseTensorSlice(TensorSlice, SparseRebase):
     def __init__(self, source, match):
-        match = validate_match(match, source.shape)
+        assert isinstance(source, SparseTensor)
 
-        shape = []
-        offset = {}
-        elided = []
-
-        for axis in range(len(match)):
-            if match[axis] is None:
-                shape.append(source.shape[axis])
-                offset[axis] = 0
-            elif isinstance(match[axis], slice):
-                s = match[axis]
-                shape.append(math.ceil((s.stop - s.start) / s.step))
-                offset[axis] = s.start
-            elif isinstance(match[axis], tuple):
-                shape.append(len(match[axis]))
-            else:
-                elided.append(axis)
-
-        for axis in range(len(match), source.ndim):
-            shape.append(source.shape[axis])
-            offset[axis] = 0
-
-        super().__init__(tuple(shape), source.dtype)
-        self._source = source
-        self._match = match
-
-        def map_coord(source_coord):
-            assert len(source_coord) == source.ndim
-            dest_coord = []
-            for axis in range(source.ndim):
-                if axis in elided:
-                    pass
-                elif isinstance(source_coord[axis], slice):
-                    raise NotImplementedError
-                elif isinstance(source_coord[axis], tuple):
-                    dest_coord.append(tuple(c - offset[axis] for c in source_coord[axis]))
-                else:
-                    dest_coord.append(source_coord[axis] - offset[axis])
-
-            for axis in range(len(source_coord), self.ndim):
-                if not axis in elided:
-                    dest_coord.append(None)
-
-            assert len(dest_coord) == self.ndim
-            return tuple(dest_coord)
-
-        def invert_coord(coord):
-            coord = [
-                coord[i] if i < len(coord) else slice(None)
-                for i in range(self.ndim)]
-
-            source_coord = []
-            for axis in range(source.ndim):
-                if axis in elided:
-                    source_coord.append(match[axis])
-                    continue
-
-                at = coord.pop(0)
-                if at is None:
-                    if axis < len(match):
-                        source_coord.append(match[axis])
-                    else:
-                        source_coord.append(None)
-                elif isinstance(at, slice):
-                    if axis < len(match):
-                        match_axis = match[axis]
-                    else:
-                        match_axis = validate_slice(slice(None), source.shape[axis])
-
-                    if isinstance(match_axis, slice):
-                        if at.start is None:
-                            start = match_axis.start
-                        elif at.start < 0:
-                            start = match_axis.stop + at.start
-                        else:
-                            start = at.start + match_axis.start
-
-                        if at.step is None or at.step == 1:
-                            step = match_axis.step
-                        else:
-                            step = match_axis.step * at.step
-
-                        if at.stop is None:
-                            stop = match_axis.stop
-                        else:
-                            at = validate_slice(at, (match_axis.stop - match_axis.start))
-                            stop = start + (match_axis.step * (at.stop - at.start))
-
-                        source_coord.append(slice(start, stop, step))
-                    else:
-                        if at.start != 0:
-                            raise IndexError
-
-                        source_coord.append(match[axis])
-                elif isinstance(at, tuple):
-                    source_coord.append(tuple(c + offset[axis] for c in at))
-                else:
-                    source_coord.append(at + offset[axis])
-
-            return tuple(source_coord)
-
-        self._map_coord = map_coord
-        self._invert_coord = invert_coord
-
-    def __getitem__(self, match):
-        match = validate_match(match, self.shape)
-        source_coord = self._invert_coord(match)
-        return self._source[source_coord]
-
-    def __setitem__(self, match, value):
-        match = validate_match(match, self.shape)
-        source_coord = self._invert_coord(match)
-        self._source[source_coord] = value
+        TensorSlice.__init__(self, source, match)
+        SparseRebase.__init__(self, source, self.shape)
 
     def filled(self):
         for row in self._source.filled(self._match):
