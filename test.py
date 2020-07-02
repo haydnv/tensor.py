@@ -267,20 +267,27 @@ def test_product():
 def test_expand_dims():
     dims = [3, 1, 5, 2]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
 
     sparse[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
+    dense[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
     ref[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     for axis in [3, 1, 0]:
         sparse = sparse.expand_dims(axis)
+        dense = dense.expand_dims(axis)
         ref = np.expand_dims(ref, axis)
         assert (sparse.to_nparray() == ref).all()
+        assert (dense.to_nparray() == ref).all()
 
     sparse = sparse.expand_dims(sparse.ndim)
+    dense = dense.expand_dims(dense.ndim)
     ref = np.expand_dims(ref, ref.ndim)
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
 
 def test_transpose():
