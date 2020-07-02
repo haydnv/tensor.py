@@ -1,5 +1,6 @@
 import numpy as np
 
+from dense import BlockTensor
 from sparse import SparseTensor
 
 
@@ -9,12 +10,22 @@ def test_eq():
     b = SparseTensor(dims)
     assert (a == b).all()
 
+    a = BlockTensor(dims)
+    b = BlockTensor(dims)
+    assert (a == b).all()
+
     dims = [5, 7, 1, 12]
     a = SparseTensor(dims)
     b = SparseTensor(dims)
+    c = BlockTensor(dims)
+    d = BlockTensor(dims)
     a[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
     b[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
+    c[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
+    d[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
     assert (a == b).all()
+    assert (c == d).all()
+    assert (a == c).all()
 
 
 def test_setitem():

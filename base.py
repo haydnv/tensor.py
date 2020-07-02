@@ -1,3 +1,4 @@
+import functools
 import itertools
 import numpy as np
 
@@ -13,6 +14,7 @@ class Tensor(object):
         self.dtype = dtype
         self.shape = tuple(shape)
         self.ndim = len(shape)
+        self.size = functools.reduce(lambda s, dim: s * dim, shape, 1)
 
     def __eq__(self, _other):
         raise NotImplementedError
@@ -51,9 +53,6 @@ class Tensor(object):
             subtraction[coord] = left[coord] - right[coord]
 
         return subtraction
-
-    def __str__(self):
-        return "{}".format(self.to_dense())
 
     def __xor__(self, other):
         this = bool(self)

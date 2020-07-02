@@ -14,20 +14,26 @@ class SparseTensorView(Tensor):
 
     def __eq__(self, other):
         if isinstance(other, self.dtype):
-            # todo: replace with DenseTensor when implemented
-            eq == np.ones(self.shape, np.bool) * (other == self.dtype(0))
+            # todo: replace with BlockTensor
+            eq = np.ones(self.shape, np.bool) * (other == self.dtype(0))
             for row in self.filled():
                 eq[row[:-1]] = row[-1] == other
             return eq
         elif self.shape != other.shape:
-            return self == other.broadcast(self.shape)
+            shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+            return self.broadcast(shape) == other.broadcast(shape)
         elif isinstance(other, SparseTensorView):
-            eq = np.ones(self.shape, np.bool)
+            eq = other == other.dtype(0)
             for row in self.filled():
-                eq[row[-1]] = row[-1] == other[row[:-1]]
+                eq[row[:-1]] = row[-1] == other[row[:-1]]
+            return eq
+        elif isinstance(other, Tensor):
+            eq = other == other.dtype(0)
+            for row in self.filled():
+                eq[row[:-1]] = row[-1] == other[row[:-1]]
             return eq
         else:
-            return Tensor.__eq__(other, self)
+            raise ValueError
 
     def __mul__(self, other):
         if not isinstance(other, Tensor) and np.array(other).shape == tuple():
@@ -50,6 +56,9 @@ class SparseTensorView(Tensor):
             multiplied[coord] = this[coord] * that[coord]
 
         return multiplied
+
+    def __str__(self):
+        return "{}".format(self.to_dense())
 
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
@@ -146,6 +155,9 @@ class SparseTensorView(Tensor):
 
     def expand_dims(self, axis):
         return SparseExpansion(self, axis)
+
+    def filled(self):
+        raise NotImplementedError
 
     def product(self, axis):
         assert axis < self.ndim
