@@ -218,16 +218,33 @@ def test_multiply():
 
 
 def test_sum():
+    dims = [2, 3, 4]
+    sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
+    ref = np.zeros(dims)
+
+    sparse[:, slice(None, None, 2)] = 1
+    dense[:, slice(None, None, 2)] = 1
+    ref[:, slice(None, None, 2)] = 1
+    assert (sparse.sum(0).to_nparray() == ref.sum(0)).all()
+    assert (dense.sum(0).to_nparray() == ref.sum(0)).all()
+    assert (sparse.sum(2).to_nparray() == ref.sum(2)).all()
+    assert (dense.sum(2).to_nparray() == ref.sum(2)).all()
+
     dims = [3, 5, 2, 4]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
     assert (sparse.sum(2).to_nparray() == np.sum(ref, 2)).all()
+    assert (dense.sum(2).to_nparray() == np.sum(ref, 2)).all()
 
     sparse[:, :, 0, slice(None, None, 3)] = 2
+    dense[:, :, 0, slice(None, None, 3)] = 2
     ref[:, :, 0, slice(None, None, 3)] = 2
 
     for axis in range(4):
         assert (sparse.sum(axis).to_nparray() == np.sum(ref, axis)).all()
+        assert (dense.sum(axis).to_nparray() == np.sum(ref, axis)).all()
 
 
 def test_product():

@@ -88,6 +88,29 @@ class BlockTensorView(Tensor):
 
         return BlockTensorBroadcast(self, shape)
 
+    def sum(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            summed = 0
+            for block in self.blocks():
+                summed += np.sum(block)
+            return summed
+
+        assert axis < self.ndim
+        shape = list(self.shape)
+        del shape[axis]
+        summed = BlockTensor(shape, self.dtype)
+
+        if axis == 0:
+            for coord in itertools.product(*[range(dim) for dim in shape]):
+                source_coord = (slice(None),) + coord
+                summed[coord] = self[source_coord].sum()
+        else:
+            prefix_range = [range(self.shape[x]) for x in range(axis)]
+            for prefix in itertools.product(*prefix_range):
+                summed[prefix] = self[prefix].sum(0)
+
+        return summed
+
 
 class BlockTensor(BlockTensorView):
     def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
