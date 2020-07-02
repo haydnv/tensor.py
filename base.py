@@ -402,6 +402,7 @@ def validate_match(match, shape):
             match[axis] = validate_tuple(match[axis], shape[axis])
         elif match[axis] < 0:
             assert abs(match[axis]) < shape[axis]
+            match[axis] = shape[axis] + match[axis]
         else:
             assert match[axis] < shape[axis]
 

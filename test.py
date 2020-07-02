@@ -139,27 +139,48 @@ def test_getitem():
     ref_slice = ref[slice(1, 3)][slice(1, 2, 2)]
     assert sparse_slice.shape == ref_slice.shape
 
+    dims = [2, 3]
+    sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
+    ref = np.zeros(dims)
+    sparse[1, -2] = 1
+    dense[1, -2] = 1
+    ref[1, -2] = 1
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
+
     dims = [5, 3, 1, 10]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
 
     assert sparse[:].shape == ref[:].shape
+    assert dense[:].shape == ref[:].shape
+    assert sparse[:, :].shape == ref[:, :].shape
     assert sparse[:, :].shape == ref[:, :].shape
     assert sparse[:, :, 0].shape == ref[:, :, 0].shape
+    assert dense[:, :, 0].shape == ref[:, :, 0].shape
     assert sparse[:, :, slice(1, None, 2)].shape == ref[:, :, slice(1, None, 2)].shape
+    assert dense[:, :, slice(1, None, 2)].shape == ref[:, :, slice(1, None, 2)].shape
 
     sparse_slice = sparse[slice(2), :][slice(1, None, 2)]
+    dense_slice = dense[slice(2), :][slice(1, None, 2)]
     ref_slice = ref[slice(2), :][slice(1, None, 2)]
     assert sparse_slice.shape == ref_slice.shape
+    assert (sparse_slice == dense_slice).all()
 
     for coord in [(3, 1, 0, 9), (3, -1, 0, 1)]:
         sparse[coord] = 1
+        dense[coord] = 1
         ref[coord] = 1
         assert sparse[coord] == ref[coord]
+        assert dense[coord] == ref[coord]
         assert (sparse.to_nparray() == ref).all()
+        assert (dense.to_nparray() == ref).all()
 
     coord = (3, slice(1, 3))
     assert (sparse[coord].to_nparray() == ref[coord]).all()
+    assert (dense[coord].to_nparray() == ref[coord]).all()
 
 
 def test_broadcast():
