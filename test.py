@@ -95,21 +95,35 @@ def test_setitem():
     assert (dense.to_nparray() == ref).all()
 
     sparse[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
+    dense[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
     ref[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
+    assert (sparse == dense).all()
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     sparse[0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    dense[0, slice(None, None, 2)][slice(None, None, 3)] = 4
     ref[0, slice(None, None, 2)][slice(None, None, 3)] = 4
+    assert (sparse == dense).all()
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     sparse_slice = sparse[0]
+    dense_slice = dense[0]
     ref_slice = ref[0]
+    assert (sparse == dense).all()
     assert (sparse_slice.to_nparray() == ref_slice).all()
+    assert (dense_slice.to_nparray() == ref_slice).all()
 
     sparse_slice = sparse[0, 0, :, :]
+    dense_slice = dense[0, 0, :, :]
     ref_slice = ref[0, 0, :, :]
+#    assert (sparse_slice == dense_slice).all()
     assert (sparse_slice.to_nparray() == ref_slice).all()
+    assert (dense_slice.to_nparray() == ref_slice).all()
+    assert (sparse == dense).all()
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
 
 def test_getitem():

@@ -15,32 +15,6 @@ class BlockTensorView(Tensor):
     def __init__(self, shape, dtype):
         Tensor.__init__(self, shape, dtype)
 
-    def blocks(self):
-        raise NotImplementedError
-
-
-class BlockTensor(BlockTensorView):
-    def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
-        BlockTensorView.__init__(self, shape, dtype)
-
-        if per_block is None:
-            per_block = BLOCK_SIZE // sys.getsizeof(dtype())
-
-        if blocks:
-            expected_block_len = self.size if len(blocks) == 1 else per_block
-            assert len(blocks[0]) == expected_block_len
-            self._blocks = blocks
-        else:
-            self._blocks = [
-                np.zeros([per_block], dtype)
-                for _ in range(self.size // per_block)]
-
-            if self.size % per_block > 0:
-                self._blocks.append(np.zeros([self.size % per_block], dtype))
-
-        self._coord_index = np.array([product(shape[axis + 1:]) for axis in range(self.ndim)])
-        self._per_block = per_block
-
     def __eq__(self, other):
         if isinstance(other, self.dtype):
             equal_blocks = []
@@ -70,6 +44,32 @@ class BlockTensor(BlockTensorView):
                 break
 
         return BlockTensor(this.shape, np.bool, equal_blocks, self._per_block)
+
+    def blocks(self):
+        raise NotImplementedError
+
+
+class BlockTensor(BlockTensorView):
+    def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
+        BlockTensorView.__init__(self, shape, dtype)
+
+        if per_block is None:
+            per_block = BLOCK_SIZE // sys.getsizeof(dtype())
+
+        if blocks:
+            expected_block_len = self.size if len(blocks) == 1 else per_block
+            assert len(blocks[0]) == expected_block_len
+            self._blocks = blocks
+        else:
+            self._blocks = [
+                np.zeros([per_block], dtype)
+                for _ in range(self.size // per_block)]
+
+            if self.size % per_block > 0:
+                self._blocks.append(np.zeros([self.size % per_block], dtype))
+
+        self._coord_index = np.array([product(shape[axis + 1:]) for axis in range(self.ndim)])
+        self._per_block = per_block
 
     def __getitem__(self, match):
         match = validate_match(match, self.shape)
@@ -121,6 +121,18 @@ class BlockTensorBroadcast(BlockTensorView, Broadcast):
         coord_range = itertools.product(*[range(dim) for dim in self.shape])
         for coords in chunk_iter(coord_range, self._source._per_block):
             yield np.array([self[coord] for coord in coords])
+
+
+class BlockTensorSlice(BlockTensorView, TensorSlice):
+    def __init__(self, source, match):
+        BlockTensorView.__init__(source.shape, source.dtype)
+        TensorSlice.__init__(source, match)
+
+    def blocks(self):
+        coord_range = itertools.product(*[range(dim) for dim in self.shape])
+        for coords in chunk_iter(coord_range, self._source._per_block):
+            yield np.array([self[coord] for coord in coords])
+
 
 def chunk_iter(iterable, chunk_size):
     chunk = []
