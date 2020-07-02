@@ -293,25 +293,35 @@ def test_expand_dims():
 def test_transpose():
     dims = [3, 2]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
 
     sparse[slice(2), 1] = 1
+    dense[slice(2), 1] = 1
     ref[slice(2), 1] = 1
 
     assert (sparse.transpose().to_nparray() == ref.transpose()).all()
     assert (sparse.transpose([0, 1]).to_nparray() == ref).all()
     assert (sparse.transpose([1, 0]).to_nparray() == np.transpose(ref, [1, 0])).all()
+    assert (dense.transpose().to_nparray() == ref.transpose()).all()
+    assert (dense.transpose([0, 1]).to_nparray() == ref).all()
+    assert (dense.transpose([1, 0]).to_nparray() == np.transpose(ref, [1, 0])).all()
 
     dims = [5, 1, 8, 3]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
 
     sparse[:, :, slice(None, None, 2)] = 1
+    dense[:, :, slice(None, None, 2)] = 1
     ref[:, :, slice(None, None, 2)] = 1
 
     assert (sparse.transpose().to_nparray() == ref.transpose()).all()
     assert (sparse.transpose([0, 2, 1, 3]).to_nparray() == np.transpose(ref, [0, 2, 1, 3])).all()
     assert (sparse.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
+    assert (dense.transpose().to_nparray() == ref.transpose()).all()
+    assert (dense.transpose([0, 2, 1, 3]).to_nparray() == np.transpose(ref, [0, 2, 1, 3])).all()
+    assert (dense.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
 
 
 def test_broadcast():
