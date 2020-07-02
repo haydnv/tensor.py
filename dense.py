@@ -25,10 +25,12 @@ class BlockTensor(BlockTensorView):
         BlockTensorView.__init__(self, shape, dtype)
         num_elements = functools.reduce(lambda size, dim: size * dim, shape, 1)
 
-        if not per_block:
+        if per_block is None:
             per_block = BLOCK_SIZE // sys.getsizeof(dtype())
 
         if blocks:
+            expected_block_len = self.size if len(blocks) == 1 else per_block
+            assert len(blocks[0]) == expected_block_len
             self._blocks = blocks
         else:
             self._blocks = [
@@ -61,7 +63,11 @@ class BlockTensor(BlockTensorView):
             try:
                 this_block = next(these_blocks)
                 that_block = next(those_blocks)
-                equal_blocks.append(this_block == that_block)
+                assert len(this_block) == len(that_block)
+
+                equal_block = this_block == that_block
+                assert len(equal_block) == len(this_block)
+                equal_blocks.append(equal_block)
             except StopIteration:
                 break
 
@@ -71,7 +77,7 @@ class BlockTensor(BlockTensorView):
         match = validate_match(match, self.shape)
 
         if len(match) == self.ndim and all(isinstance(c, int) for c in match):
-            index = functools.reduce(lambda i, c: i * c, match, 1)
+            index = sum(np.array(match) * self._coord_index)
             return self._blocks[index // self._per_block][index % self._per_block]
         else:
             return TensorSlice(self, match)
@@ -115,7 +121,7 @@ class BlockTensorBroadcast(BlockTensorView, Broadcast):
 
     def blocks(self):
         coord_range = itertools.product(*[range(dim) for dim in self.shape])
-        for coords in chunk_iter(coord_range, BLOCK_OF_COORDS_LEN):
+        for coords in chunk_iter(coord_range, self._source._per_block):
             yield np.array([self[coord] for coord in coords])
 
 def chunk_iter(iterable, chunk_size):

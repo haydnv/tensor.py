@@ -17,10 +17,8 @@ def test_eq():
     dims = [2, 1]
     sparse = SparseTensor(dims)
     dense = BlockTensor(dims)
-    ref = np.zeros(dims)
     sparse[slice(1, None, 1)] = 3
     dense[slice(1, None, 1)] = 3
-    sparse[slice(1, None, 1)] = 3
     assert (sparse[0].to_nparray() == sparse.to_nparray()[0]).all()
     assert (dense[0].to_nparray() == dense.to_nparray()[0]).all()
     assert (sparse == dense).all()
@@ -42,11 +40,15 @@ def test_eq():
 def test_setitem():
     dims = [7, 10]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
 
     sparse[0, 1] = 1
+    dense[0, 1] = 1
     ref[0, 1] = 1
+    assert (sparse == dense).all()
     assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
     sparse_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
     ref_slice = ref[slice(None, None, 2)][slice(None, -1, 3)]
