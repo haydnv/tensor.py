@@ -88,6 +88,29 @@ class BlockTensorView(Tensor):
 
         return BlockTensorBroadcast(self, shape)
 
+    def product(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            product = 1
+            for block in self.blocks():
+                product *= np.product(block)
+            return product
+
+        assert axis < self.ndim
+        shape = list(self.shape)
+        del shape[axis]
+        product = BlockTensor(shape, self.dtype)
+
+        if axis == 0:
+            for coord in itertools.product(*[range(dim) for dim in shape]):
+                source_coord = (slice(None),) + coord
+                product[coord] = self[source_coord].product()
+        else:
+            prefix_range = [range(self.shape[x]) for x in range(axis)]
+            for prefix in itertools.product(*prefix_range):
+                product[prefix] = self[prefix].product(0)
+
+        return product
+
     def sum(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
             summed = 0

@@ -250,14 +250,18 @@ def test_sum():
 def test_product():
     dims = [3, 5, 2, 4]
     sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
     ref = np.zeros(dims)
     assert (sparse.product(2).to_nparray() == np.product(ref, 2)).all()
+    assert (dense.product(2).to_nparray() == np.product(ref, 2)).all()
 
     sparse[:, :, 0, slice(None, None, 3)] = 2
+    dense[:, :, 0, slice(None, None, 3)] = 2
     ref[:, :, 0, slice(None, None, 3)] = 2
 
     for axis in range(4):
         assert (sparse.product(axis).to_nparray() == np.product(ref, axis)).all()
+        assert (dense.product(axis).to_nparray() == np.product(ref, axis)).all()
 
 
 def test_expand_dims():
