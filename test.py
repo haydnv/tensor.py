@@ -338,7 +338,7 @@ def test_broadcast():
 
     ref_a = np.zeros([2, 1, 3])
     a1[0] = 2
-    a2[0] = 1
+    a2[0] = 2
     ref_a[0] = 2
 
     ref_b = np.zeros([2, 3, 1])
@@ -347,18 +347,18 @@ def test_broadcast():
     ref_b[0] = 3
 
     a1_b1 = a1 * b1
-#    a2_b1 = a2 * b1
-#    a1_b2 = a1 * b2
-#    a2_b2 = a2 * b2
+    a2_b1 = a2 * b1
+    a1_b2 = a1 * b2
+    a2_b2 = a2 * b2
     ref_a_b = ref_a * ref_b
     assert a1_b1.shape == ref_a_b.shape
-#    assert a1_b2.shape == ref_a_b.shape
-#    assert a2_b1.shape == ref_a_b.shape
-#    assert a2_b2.shape == ref_a_b.shape
+    assert a1_b2.shape == ref_a_b.shape
+    assert a2_b1.shape == ref_a_b.shape
+    assert a2_b2.shape == ref_a_b.shape
     assert (a1_b1.to_nparray() == ref_a_b).all()
-#    assert (a1_b2.to_nparray() == ref_a_b).all()
-#    assert (a2_b1.to_nparray() == ref_a_b).all()
-#    assert (a2_b2.to_nparray() == ref_a_b).all()
+    assert (a1_b2.to_nparray() == ref_a_b).all()
+    assert (a2_b1.to_nparray() == ref_a_b).all()
+    assert (a2_b2.to_nparray() == ref_a_b).all()
 
 
 if __name__ == "__main__":
