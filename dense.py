@@ -20,7 +20,7 @@ class BlockTensorView(Tensor):
         self._per_block = per_block
 
     def __eq__(self, other):
-        if isinstance(other, self.dtype):
+        if not hasattr(other, "shape") or other.shape == tuple():
             equal_blocks = []
             for block in self.blocks():
                 equal_blocks.append(block == other)
@@ -48,6 +48,36 @@ class BlockTensorView(Tensor):
                 break
 
         return BlockTensor(this.shape, np.bool, equal_blocks, self._per_block)
+
+    def __mul__(self, other):
+        if not hasattr(other, "shape") or other.shape == tuple():
+            mul_blocks = []
+            for block in self.blocks():
+                mul_blocks.append(block * other)
+            return BlockTensor(self.shape, self.dtype, mul_blocks, self._per_block)
+        elif not isinstance(other, BlockTensorView):
+            return other * self
+
+        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+        this = self.broadcast(shape)
+        that = other.broadcast(shape)
+
+        these_blocks = this.blocks()
+        those_blocks = that.blocks()
+        mul_blocks = []
+        while True:
+            try:
+                this_block = next(these_blocks)
+                that_block = next(those_blocks)
+                assert len(this_block) == len(that_block)
+
+                mul_block = this_block * that_block
+                assert len(mul_block) == len(this_block)
+                mul_blocks.append(mul_block)
+            except StopIteration:
+                break
+
+        return BlockTensor(this.shape, this.dtype, mul_blocks, this._per_block)
 
     def blocks(self):
         raise NotImplementedError

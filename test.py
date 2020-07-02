@@ -183,23 +183,38 @@ def test_getitem():
     assert (dense[coord].to_nparray() == ref[coord]).all()
 
 
-def test_broadcast():
-    a = SparseTensor([2, 1, 3])
-    b = SparseTensor([2, 3, 1])
-    assert (a.broadcast(b.shape) == b.broadcast(a.shape)).all()
+def test_multiply():
+    dims = [3]
+    sparse_a = SparseTensor(dims)
+    dense_a = BlockTensor(dims)
+    ref_a = np.zeros(dims)
+    sparse_b = SparseTensor(dims)
+    dense_b = BlockTensor(dims)
+    ref_b = np.zeros(dims)
 
-    ref_a = np.zeros([2, 1, 3])
-    a[0] = 2
-    ref_a[0] = 2
+    sparse_a[0] = 3
+    dense_a[0] = 3
+    ref_a[0] = 3
+    sparse_b[0] = 2
+    dense_b[0] = 2
+    ref_b[0] = 2
 
-    ref_b = np.zeros([2, 3, 1])
-    b[0] = 3
-    ref_b[0] = 3
-
-    a_b = a * b
     ref_a_b = ref_a * ref_b
-    assert a_b.shape == ref_a_b.shape
-    assert (a_b.to_nparray() == ref_a_b).all()
+    assert ((sparse_a * sparse_b).to_nparray() == ref_a_b).all()
+    assert ((dense_a * dense_b).to_nparray() == ref_a_b).all()
+    assert ((dense_a * sparse_b).to_nparray() == ref_a_b).all()
+    assert ((sparse_a * dense_b).to_nparray() == ref_a_b).all()
+
+    dims = [2, 5]
+    sparse = SparseTensor(dims)
+    dense = BlockTensor(dims)
+    ref = np.zeros(dims)
+    sparse[0] = 1
+    dense[0] = 1
+    ref[0] = 1
+
+    assert ((sparse * 5).to_nparray() == (ref * 5)).all()
+    assert ((dense * 5).to_nparray() == (ref * 5)).all()
 
 
 def test_sum():
@@ -271,24 +286,41 @@ def test_transpose():
     assert (sparse.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
 
 
-def test_multiply():
-    sparse_a = SparseTensor([3])
-    ref_a = np.zeros([3])
-    sparse_b = SparseTensor([3])
-    ref_b = np.zeros([3])
+def test_broadcast():
+    a1 = SparseTensor([2, 1, 3])
+    b1 = SparseTensor([2, 3, 1])
+    assert (a1.broadcast(b1.shape) == b1.broadcast(a1.shape)).all()
 
-    sparse_a[0] = 3
-    ref_a[0] = 3
-    sparse_b[0] = 2
-    ref_b[0] = 2
-    assert ((sparse_a * sparse_b).to_nparray() == ref_a * ref_b).all()
+    a2 = BlockTensor([2, 1, 3])
+    b2 = BlockTensor([2, 3, 1])
+    assert (a2.broadcast(b2.shape) == b2.broadcast(a2.shape)).all()
+    assert (a1.broadcast(b2.shape) == b2.broadcast(a1.shape)).all()
+    assert (a2.broadcast(b1.shape) == b2.broadcast(a1.shape)).all()
+    assert (a1.broadcast(b2.shape) == b1.broadcast(a2.shape)).all()
 
-    sparse = SparseTensor([2, 5])
-    dense = np.zeros([2, 5])
-    sparse[0] = 1
-    dense[0] = 1
+    ref_a = np.zeros([2, 1, 3])
+    a1[0] = 2
+    a2[0] = 1
+    ref_a[0] = 2
 
-    assert ((sparse * 5).to_nparray() == (dense * 5)).all()
+    ref_b = np.zeros([2, 3, 1])
+    b1[0] = 3
+    b2[0] = 3
+    ref_b[0] = 3
+
+    a1_b1 = a1 * b1
+#    a2_b1 = a2 * b1
+#    a1_b2 = a1 * b2
+#    a2_b2 = a2 * b2
+    ref_a_b = ref_a * ref_b
+    assert a1_b1.shape == ref_a_b.shape
+#    assert a1_b2.shape == ref_a_b.shape
+#    assert a2_b1.shape == ref_a_b.shape
+#    assert a2_b2.shape == ref_a_b.shape
+    assert (a1_b1.to_nparray() == ref_a_b).all()
+#    assert (a1_b2.to_nparray() == ref_a_b).all()
+#    assert (a2_b1.to_nparray() == ref_a_b).all()
+#    assert (a2_b2.to_nparray() == ref_a_b).all()
 
 
 if __name__ == "__main__":

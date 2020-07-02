@@ -41,9 +41,6 @@ class SparseTensorView(Tensor):
                 multiplied[row[:-1]] = self[row[:-1]] * other
             return multiplied
 
-        elif not isinstance(other, SparseTensorView):
-            return Tensor.__mul__(self, other)
-
         shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
         this = self.broadcast(shape)
         that = other.broadcast(shape)
