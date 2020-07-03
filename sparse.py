@@ -153,6 +153,9 @@ class SparseTensorView(Tensor):
         self.shape = new_shape
         self.size = product(new_shape)
 
+    def expand_dims(self, axis):
+        return SparseExpansion(self, axis)
+
     def filled(self):
         raise NotImplementedError
 
@@ -282,9 +285,6 @@ class SparseTensor(SparseTensorView):
                 self._table.upsert(coord, (value,))
 
             self._table.rebalance()
-
-    def expand_dims(self, axis):
-        return SparseExpansion(self, axis)
 
     def filled(self, match=None):
         if match is None:
