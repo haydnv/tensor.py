@@ -162,45 +162,30 @@ class SparseTensorView(Tensor):
     def filled_count(self):
         raise NotImplementedError
 
-    def product(self, axis):
-        assert axis < self.ndim
+    def product(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            if self.filled_count() == self.size:
+                return product(row[-1] for row in self.filled())
+            else:
+                return self.dtype(0)
 
+        assert axis < self.ndim
         shape = list(self.shape)
         del shape[axis]
-        product = SparseTensor(shape, self.dtype)
-        visited = SparseTensor(shape, np.bool)
+        multiplied = BlockTensor(shape, self.dtype)
 
-        for row in self.filled():
-            elide = list(row[:-1])
-            elide[axis] = slice(None)
-            elide = tuple(elide)
-            if not self[elide].all():
-                continue
+        if axis == 0:
+            for i in self.filled_at((slice(None),)):
+                group_by = i + tuple([slice(None)] * (self.ndim - 1))
+                for coord in self.filled_at(group_by):
+                    source_coord = (slice(None),) + coord[1:]
+                    multiplied[coord[1:]] = self[source_coord].product()
+        else:
+            prefix_range = [range(self.shape[x]) for x in range(axis)]
+            for prefix in itertools.product(*prefix_range):
+                multiplied[prefix] = self[prefix].product(0)
 
-            if axis == 0:
-                coord = row[1:-1]
-                if visited[coord]:
-                    product[coord] *= row[-1]
-                else:
-                    visited[coord] = True
-                    product[coord] = row[-1]
-            elif axis == self.ndim - 1:
-                coord = row[:-2]
-                if visited[coord]:
-                    product[coord] *= row[-1]
-                else:
-                    visited[coord] = True
-                    product[coord] = row[-1]
-            else:
-                l = row[:axis]
-                r = row[(axis + 1):-1]
-                if visited[l][r]:
-                    product[l][r] *= row[-1]
-                else:
-                    visited[l][r] = True
-                    product[l][r] = row[-1]
-
-        return product
+        return multiplied
 
     def sum(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
@@ -213,9 +198,10 @@ class SparseTensorView(Tensor):
 
         if axis == 0:
             for i in self.filled_at((slice(None),)):
-                group_by = i + tuple(slice(None) for _ in range(self.ndim - 1))
+                group_by = i + tuple([slice(None)] * (self.ndim - 1))
                 for coord in self.filled_at(group_by):
-                    summed[coord[1:]] += self[coord].sum()
+                    source_coord = (slice(None),) + coord[1:]
+                    summed[coord[1:]] = self[source_coord].sum()
         else:
             prefix_range = [slice(None)] * axis
             for prefix in self.filled_at(prefix_range):
@@ -302,9 +288,9 @@ class SparseTensor(SparseTensorView):
 
     def filled(self, match=None):
         if match is None:
-            yield from self._table
+            return self._table
         else:
-            yield from self._slice_table(match)
+            return self._slice_table(match)
 
     def filled_at(self, match):
         yield from self._slice_table(match).group_by([i for i in range(len(match))])
