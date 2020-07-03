@@ -200,11 +200,8 @@ class SparseTensorView(Tensor):
         summed = SparseTensor(shape, self.dtype)
 
         if axis == 0:
-            for i in self.filled_at((slice(None),)):
-                group_by = i + tuple([slice(None)] * (self.ndim - 1))
-                for coord in self.filled_at(group_by):
-                    source_coord = (slice(None),) + coord[1:]
-                    summed[coord[1:]] = self[source_coord].sum()
+            for row in self.filled():
+                summed[row[1:-1]] += row[-1]
         else:
             prefix_range = [slice(None)] * axis
             for prefix in self.filled_at(prefix_range):

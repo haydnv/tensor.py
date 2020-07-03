@@ -38,7 +38,7 @@ def test_eq():
 
 
 def test_setitem():
-    dims = [7, 10]
+    dims = [3, 4]
     sparse = SparseTensor(dims)
     dense = BlockTensor(dims)
     ref = np.zeros(dims)
@@ -231,6 +231,13 @@ def test_sum():
     assert (sparse.sum(2).to_nparray() == ref.sum(2)).all()
     assert (dense.sum(2).to_nparray() == ref.sum(2)).all()
 
+    for axis in range(2):
+        sparse = sparse.sum(0)
+        dense = dense.sum(0)
+        ref = ref.sum(0)
+        assert (sparse.to_nparray() == ref).all()
+        assert (dense.to_nparray() == ref).all()
+
     dims = [3, 5, 2, 4]
     sparse = SparseTensor(dims)
     dense = BlockTensor(dims)
@@ -245,6 +252,13 @@ def test_sum():
     for axis in range(4):
         assert (sparse.sum(axis).to_nparray() == np.sum(ref, axis)).all()
         assert (dense.sum(axis).to_nparray() == np.sum(ref, axis)).all()
+
+    for axis in range(3):
+        sparse = sparse.sum(0)
+        dense = dense.sum(0)
+        ref = ref.sum(0)
+        assert (sparse.to_nparray() == ref).all()
+        assert (dense.to_nparray() == ref).all()
 
 
 def test_product():
