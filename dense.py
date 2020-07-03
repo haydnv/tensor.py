@@ -3,7 +3,7 @@ import math
 import numpy as np
 import sys
 
-from base import Broadcast, Expansion, Rebase, Tensor, TensorSlice
+from base import Broadcast, Expansion, Permutation, Rebase, Tensor, TensorSlice
 from base import affected, product, validate_match
 
 
@@ -137,6 +137,9 @@ class BlockTensorView(Tensor):
 
         return summed
 
+    def transpose(self, permutation=None):
+        return BlockTensorPermutation(self, permutation)
+
 
 class BlockTensor(BlockTensorView):
     def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
@@ -216,6 +219,12 @@ class BlockTensorExpansion(BlockTensorDerived, Expansion):
 class BlockTensorSlice(BlockTensorDerived, TensorSlice):
     def __init__(self, source, match):
         TensorSlice.__init__(self, source, match)
+        BlockTensorDerived.__init__(self, source, self.shape)
+
+
+class BlockTensorPermutation(BlockTensorDerived, Permutation):
+    def __init__(self, source, permutation=None):
+        Permutation.__init__(self, source, permutation)
         BlockTensorDerived.__init__(self, source, self.shape)
 
 
