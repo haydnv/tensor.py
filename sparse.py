@@ -156,6 +156,9 @@ class SparseTensorView(Tensor):
     def filled(self):
         raise NotImplementedError
 
+    def filled_at(self):
+        raise NotImplementedError
+
     def filled_count(self):
         raise NotImplementedError
 
@@ -199,24 +202,24 @@ class SparseTensorView(Tensor):
 
         return product
 
-    def sum(self, axis):
-        assert axis < self.ndim
+    def sum(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            return sum(row[-1] for row in self.filled())
 
+        assert axis < self.ndim
         shape = list(self.shape)
         del shape[axis]
         summed = SparseTensor(shape, self.dtype)
 
         if axis == 0:
-            for row in self.filled():
-                summed[row[1:-1]] += row[-1]
-        elif axis == self.ndim - 1:
-            for row in self.filled():
-                summed[row[:-2]] += row[-1]
+            for i in self.filled_at((slice(None),)):
+                group_by = i + tuple(slice(None) for _ in range(self.ndim - 1))
+                for coord in self.filled_at(group_by):
+                    summed[coord[1:]] += self[coord].sum()
         else:
-            for row in self.filled():
-                coord = row[:-1]
-                val = row[-1]
-                summed[coord[:axis]][coord[(axis + 1):]] += val
+            prefix_range = [slice(None)] * axis
+            for prefix in self.filled_at(prefix_range):
+                summed[prefix] = self[prefix].sum(0)
 
         return summed
 
@@ -303,6 +306,9 @@ class SparseTensor(SparseTensorView):
         else:
             yield from self._slice_table(match)
 
+    def filled_at(self, match):
+        yield from self._slice_table(match).group_by([i for i in range(len(match))])
+
     def filled_count(self):
         return len(self._table)
 
@@ -351,6 +357,10 @@ class SparseRebase(SparseTensorView):
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
+
+    def filled_at(self, match):
+        for coord in self._source.filled_at(self._invert_coord(match)):
+            yield self._map_coord(coord)
 
     def filled_count(self):
         return self._source.filled_count()
