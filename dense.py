@@ -142,6 +142,16 @@ class BlockTensorView(Tensor):
 
 
 class BlockTensor(BlockTensorView):
+    @staticmethod
+    def ones(shape, dtype=np.int32):
+        per_block = BLOCK_SIZE // sys.getsizeof(dtype())
+        size = product(shape)
+        blocks = [np.ones([per_block]) for _ in range(size // per_block)]
+        if size % per_block > 0:
+            blocks.append(np.ones([size % per_block]))
+
+        return BlockTensor(shape, dtype, blocks, per_block)
+
     def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
         BlockTensorView.__init__(self, shape, dtype, per_block)
 

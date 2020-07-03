@@ -5,6 +5,7 @@ import numpy as np
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expansion, Permutation, Tensor, TensorSlice
 from base import affected, product, validate_match, validate_slice, validate_tuple
+from dense import BlockTensor
 
 
 class SparseTensorView(Tensor):
@@ -13,8 +14,7 @@ class SparseTensorView(Tensor):
 
     def __eq__(self, other):
         if isinstance(other, self.dtype):
-            # todo: replace with BlockTensor
-            eq = np.ones(self.shape, np.bool) * (other == self.dtype(0))
+            eq = BlockTensor.ones(self.shape, np.bool) * (other == self.dtype(0))
             for row in self.filled():
                 eq[row[:-1]] = row[-1] == other
             return eq
