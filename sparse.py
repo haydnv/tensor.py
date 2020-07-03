@@ -46,10 +46,14 @@ class SparseTensorView(Tensor):
         that = other.broadcast(shape)
 
         multiplied = SparseTensor(this.shape, this.dtype)
-        # TODO: optimize by iterating over the tensor with fewer elements
-        for row in this.filled():
-            coord = row[:-1]
-            multiplied[coord] = this[coord] * that[coord]
+        if isinstance(that, SparseTensorView) and that.filled_count() < this.filled_count():
+            for row in that.filled():
+                coord = row[:-1]
+                multiplied[coord] = this[coord] * that[coord]
+        else:
+            for row in this.filled():
+                coord = row[:-1]
+                multiplied[coord] = this[coord] * that[coord]
 
         return multiplied
 
@@ -155,6 +159,9 @@ class SparseTensorView(Tensor):
         self.size = product(new_shape)
 
     def filled(self):
+        raise NotImplementedError
+
+    def filled_count(self):
         raise NotImplementedError
 
     def product(self, axis):
@@ -301,6 +308,9 @@ class SparseTensor(SparseTensorView):
         else:
             yield from self._slice_table(match)
 
+    def filled_count(self):
+        return len(self._table)
+
     def _delete_filled(self, match):
         self._slice_table(match).delete()
 
@@ -346,6 +356,9 @@ class SparseRebase(SparseTensorView):
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
+
+    def filled_count(self):
+        return self._source.filled_count()
 
 
 class SparseBroadcast(Broadcast, SparseRebase):
@@ -394,4 +407,7 @@ class SparseTensorSlice(TensorSlice, SparseRebase):
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
+
+    def filled_count(self):
+        return self._source.filled(self._match).count()
 
