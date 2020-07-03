@@ -21,11 +21,6 @@ class SparseTensorView(Tensor):
         elif self.shape != other.shape:
             shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
             return self.broadcast(shape) == other.broadcast(shape)
-        elif isinstance(other, SparseTensorView):
-            eq = other == other.dtype(0)
-            for row in self.filled():
-                eq[row[:-1]] = row[-1] == other[row[:-1]]
-            return eq
         elif isinstance(other, Tensor):
             eq = other == other.dtype(0)
             for row in self.filled():
