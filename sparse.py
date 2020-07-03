@@ -146,8 +146,13 @@ class SparseTensorView(Tensor):
     def copy(self):
         return self._copy(self.dtype)
 
-    def expand_dims(self, axis):
-        return SparseExpansion(self, axis)
+    def expand(self, new_shape):
+        assert len(new_shape) == self.ndim
+        for axis in range(self.ndim):
+            assert new_shape[axis] >= self.shape[axis]
+
+        self.shape = new_shape
+        self.size = product(new_shape)
 
     def filled(self):
         raise NotImplementedError
@@ -286,6 +291,9 @@ class SparseTensor(SparseTensorView):
                 self._table.upsert(coord, (value,))
 
             self._table.rebalance()
+
+    def expand_dims(self, axis):
+        return SparseExpansion(self, axis)
 
     def filled(self, match=None):
         if match is None:
