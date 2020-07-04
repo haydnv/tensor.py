@@ -178,14 +178,10 @@ class SparseTensorView(Tensor):
         multiplied = BlockTensor(shape, self.dtype)
 
         if axis == 0:
-            for i in self.filled_at((slice(None),)):
-                group_by = i + tuple([slice(None)] * (self.ndim - 1))
-                for coord in self.filled_at(group_by):
-                    source_coord = (slice(None),) + coord[1:]
-                    multiplied[coord[1:]] = self[source_coord].product()
+            for coord in self.filled_at(list(range(1, self.ndim))):
+                multiplied[coord] = self[(slice(None),) + coord].product()
         else:
-            prefix_range = [range(self.shape[x]) for x in range(axis)]
-            for prefix in itertools.product(*prefix_range):
+            for prefix in self.filled_at(list(range(axis))):
                 multiplied[prefix] = self[prefix].product(0)
 
         return multiplied
@@ -200,11 +196,10 @@ class SparseTensorView(Tensor):
         summed = SparseTensor(shape, self.dtype)
 
         if axis == 0:
-            for row in self.filled():
-                summed[row[1:-1]] += row[-1]
+            for coord in self.filled_at(list(range(1, self.ndim))):
+                summed[coord] = self[(slice(None),) + coord].sum()
         else:
-            prefix_range = [slice(None)] * axis
-            for prefix in self.filled_at(prefix_range):
+            for prefix in self.filled_at(list(range(axis))):
                 summed[prefix] = self[prefix].sum(0)
 
         return summed
@@ -289,8 +284,8 @@ class SparseTensor(SparseTensorView):
         else:
             return self._slice_table(match)
 
-    def filled_at(self, match):
-        yield from self._slice_table(match).group_by([i for i in range(len(match))])
+    def filled_at(self, axes):
+        yield from self._table.group_by(axes)
 
     def filled_count(self):
         return len(self._table)
@@ -341,9 +336,8 @@ class SparseRebase(SparseTensorView):
             value = row[-1]
             yield self._map_coord(coord) + (value,)
 
-    def filled_at(self, match):
-        for coord in self._source.filled_at(self._invert_coord(match)):
-            yield self._map_coord(coord)
+    def filled_at(self, axes):
+        return self._source.filled_at(axes)
 
     def filled_count(self):
         return self._source.filled_count()
@@ -376,11 +370,20 @@ class SparseExpansion(Expansion, SparseRebase):
         Expansion.__init__(self, source, axis)
         SparseRebase.__init__(self, source, self.shape)
 
+    def filled_at(self, axes):
+        axes = list(axes)
+        axes.remove(self._expand)
+        return self._source.filled_at(axes)
+
 
 class SparsePermutation(Permutation, SparseRebase):
     def __init__(self, source, permutation=None):
         Permutation.__init__(self, source, permutation)
         SparseRebase.__init__(self, source, self.shape)
+
+    def filled_at(self, axes):
+        source_axes = [self.permute_from[axis] for axis in axes]
+        return self._source.filled_at(source_axes)
 
 
 class SparseTensorSlice(TensorSlice, SparseRebase):
@@ -395,6 +398,11 @@ class SparseTensorSlice(TensorSlice, SparseRebase):
             coord = row[:-1]
             value = row[-1]
             yield self._map_coord(coord) + (value,)
+
+    def filled_at(self, axes):
+        offset = self._source.ndim - self.ndim
+        source_axes = [axis + offset for axis in axes]
+        return self._source.filled(self._match).group_by(source_axes)
 
     def filled_count(self):
         return self._source.filled(self._match).count()
