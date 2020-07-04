@@ -52,6 +52,19 @@ class SparseTensorView(Tensor):
 
         return multiplied
 
+    def __or__(self, other):
+        if not hasattr(other, "shape") or other.shape == tuple():
+            if other:
+                return BlockTensor.ones(self.shape, np.bool)
+            else:
+                return SparseTensor(self.shape, np.bool)
+        else:
+            shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+            result = other.broadcast(shape).copy(np.bool)
+            for row in self.broadcast(shape):
+                result[row[:-1]] = True
+            return result
+
     def __sub__(self, other):
         if isinstance(other, SparseTensorView):
             left = self
@@ -164,6 +177,17 @@ class SparseTensorView(Tensor):
 
     def filled_count(self):
         raise NotImplementedError
+
+    def mask(self, other):
+        if isinstance(other, SparseTensorView):
+            for row in other.filled():
+                self[row[:-1]] = self.dtype(0)
+        elif isinstance(other, Tensor):
+            for coord in itertools.product(*[range(dim) for dim in other.shape]):
+                if other[coord]:
+                    self[coord] = self.dtype(0)
+        else:
+            raise ValueError
 
     def product(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
