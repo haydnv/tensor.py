@@ -60,8 +60,8 @@ class SparseTensorView(Tensor):
                 return SparseTensor(self.shape, np.bool)
         else:
             shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
-            result = other.broadcast(shape).copy(np.bool)
-            for row in self.broadcast(shape):
+            result = other.broadcast(shape)._copy(np.bool)
+            for row in self.broadcast(shape).filled():
                 result[row[:-1]] = True
             return result
 
