@@ -337,6 +337,18 @@ def test_transpose():
     assert (dense.transpose([0, 2, 1, 3]).to_nparray() == np.transpose(ref, [0, 2, 1, 3])).all()
     assert (dense.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
 
+    permutation = [3, 1, 0, 2] # shape = (3, 1, 5, 8)
+
+    sparse_slice = sparse.transpose(permutation)[:, slice(None, 4), 0]
+    dense_slice = dense.transpose(permutation)[:, slice(None, 4), 0]
+    ref_slice = ref.transpose(permutation)[:, slice(None, 4), 0]
+
+    assert sparse_slice.shape == ref_slice.shape
+    assert dense_slice.shape == ref_slice.shape
+
+    assert (sparse_slice.to_nparray() == ref_slice).all()
+    assert (dense_slice.to_nparray() == ref_slice).all()
+
 
 def test_broadcast():
     a1 = SparseTensor([2, 1, 3])

@@ -209,7 +209,7 @@ class Expansion(Rebase):
         validate_match(coord, self.shape)
 
         if len(coord) < self._expand:
-            return match
+            return coord
         else:
             coord = list(coord)
             del coord[self._expand]
@@ -232,25 +232,47 @@ class Permutation(Rebase):
             permutation = list(reversed(list(axis for axis in range(source.ndim))))
 
         assert len(permutation) == source.ndim
-        permutation = dict((axis, permutation[axis]) for axis in range(len(permutation)))
+        assert all(permutation[axis] < source.ndim for axis in range(len(permutation)))
 
-        self._permute_from = permutation
-        self._permute_to = {d: s for s, d in permutation.items()}
+        self._permutation = permutation
 
         shape = [source.shape[permutation[axis]] for axis in range(source.ndim)]
         Rebase.__init__(self, source, shape)
+
+    def __getitem__(self, coord):
+        source = self._source[self._invert_coord(coord)]
+        if source.shape == tuple():
+            return source
+
+        permutation = list(self._permutation)
+        elided = []
+        for axis in range(len(coord)):
+            if isinstance(coord[axis], int):
+                elided.append(permutation[axis])
+                del permutation[axis]
+
+        for axis in elided:
+            for i in range(len(permutation)):
+                if permutation[i] > axis:
+                    permutation[i] -= 1
+
+        return source.transpose(permutation)
 
     def _invert_coord(self, coord):
         if not isinstance(coord, tuple):
             coord = (coord,)
 
-        return tuple(coord[self._permute_to[axis]] for axis in range(len(coord)))
+        source_coord = [slice(None)] * self.ndim
+        for axis in range(len(coord)):
+            source_coord[self._permutation[axis]] = coord[axis]
+
+        return tuple(source_coord)
 
     def _map_coord(self, coord):
         if not isinstance(coord, tuple):
             coord = (coord,)
 
-        return tuple(coord[self._permute_from[axis]] for axis in range(len(coord)))
+        return tuple(coord[self._permutation[axis]] for axis in range(len(coord)))
 
 
 class TensorSlice(Rebase):
@@ -416,12 +438,16 @@ def validate_slice(s, dim):
     else:
         start = s.start
 
+    start = min(start, dim)
+
     if s.stop is None:
         stop = dim
     elif s.stop < 0:
         stop = dim + s.stop
     else:
         stop = s.stop
+
+    stop = min(stop, dim)
 
     step = s.step if s.step else 1
 
