@@ -232,8 +232,7 @@ class Permutation(Rebase):
             permutation = list(reversed(list(axis for axis in range(source.ndim))))
 
         assert len(permutation) == source.ndim
-        offset = source.ndim - len(permutation)
-        permutation = dict((offset + axis, permutation[axis]) for axis in range(len(permutation)))
+        permutation = dict((axis, permutation[axis]) for axis in range(len(permutation)))
 
         self._permute_from = permutation
         self._permute_to = {d: s for s, d in permutation.items()}
