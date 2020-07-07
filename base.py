@@ -3,6 +3,8 @@ import itertools
 import math
 import numpy as np
 
+from collections import OrderedDict
+
 
 class Tensor(object):
     def __init__(self, shape, dtype=np.int32):
@@ -244,7 +246,7 @@ class Permutation(Rebase):
         if source.shape == tuple():
             return source
 
-        permutation = list(self._permutation)
+        permutation = OrderedDict(zip(range(self.ndim), self._permutation))
         elided = []
         for axis in range(len(coord)):
             if isinstance(coord[axis], int):
@@ -252,11 +254,11 @@ class Permutation(Rebase):
                 del permutation[axis]
 
         for axis in elided:
-            for i in range(len(permutation)):
+            for i in permutation:
                 if permutation[i] > axis:
                     permutation[i] -= 1
 
-        return source.transpose(permutation)
+        return source.transpose(list(permutation.values()))
 
     def _invert_coord(self, coord):
         if not isinstance(coord, tuple):
