@@ -196,8 +196,12 @@ class BlockTensor(BlockTensorView):
 
                 indices = block // self._per_block
                 offsets = block % self._per_block
-                for i, o in zip(indices, offsets):
-                    self._blocks[i][o] = value
+
+                i = 0
+                for block_id in np.unique(indices):
+                    num_to_update = np.sum(indices == block_id)
+                    self._blocks[block_id][offsets[i:(i + num_to_update)]] = value
+                    i += num_to_update
 
     def blocks(self):
         yield from (block for block in self._blocks)
