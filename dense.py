@@ -192,8 +192,7 @@ class BlockTensor(BlockTensorView):
             for coords in chunk_iter(affected_range, BLOCK_OF_COORDS_LEN):
                 coords = [list(coord) for coord in coords]
                 block = np.array(coords) * self._coord_index
-                while block.ndim > 1:
-                    block = block.sum(1)
+                block = block.sum(1)
 
                 indices = block // self._per_block
                 offsets = block % self._per_block
