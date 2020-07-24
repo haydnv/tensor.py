@@ -297,6 +297,12 @@ def test_expand_dims():
         assert (sparse.to_nparray() == ref).all()
         assert (dense.to_nparray() == ref).all()
 
+    sparse = sparse.expand_dims(sparse.ndim)
+    dense = dense.expand_dims(dense.ndim)
+    ref = np.expand_dims(ref, ref.ndim)
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
+
 
 def test_transpose():
     dims = [3, 2]

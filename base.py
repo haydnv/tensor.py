@@ -198,7 +198,7 @@ class Broadcast(Rebase):
 
 class Expansion(Rebase):
     def __init__(self, source, axes):
-        if (np.array(list(axes.keys())) >= source.ndim).any():
+        if (np.array(list(axes.keys())) > source.ndim).any():
             raise IndexError
         elif (np.array(list(axes.values())) <= 0).any():
             raise ValueError
@@ -209,6 +209,9 @@ class Expansion(Rebase):
                 shape.extend([1] * axes[source_axis])
             shape.append(source.shape[source_axis])
 
+        if source.ndim in axes:
+            shape.append(1)
+
         Rebase.__init__(self, source, shape)
 
         self._expand = axes
@@ -216,6 +219,9 @@ class Expansion(Rebase):
     def _invert_coord(self, coord):
         validate_match(coord, self.shape)
         coord = list(coord)
+
+        if len(coord) == self.ndim and self._source.ndim in self._expand:
+            del coord[-1]
 
         for axis in range(self._source.ndim):
             if axis in self._expand:
@@ -233,11 +239,12 @@ class Expansion(Rebase):
 
             coord.append(source_coord[axis])
 
+        if self._source.ndim in self._expand:
+            coord.append(0)
+
         return tuple(coord)
 
     def expand_dims(self, axis):
-        assert axis < self.ndim
-
         offset = 0
         axes = dict(self._expand)
         for source_axis in range(self._source.ndim):
@@ -251,6 +258,12 @@ class Expansion(Rebase):
             elif axis == source_axis + offset:
                 axes[source_axis] = 1
                 break
+
+        if axis == self.ndim:
+            if self._source.ndim in axes:
+                axes[self._source.ndim] += 1
+            else:
+                axes[self._source.ndim] = 1
 
         return Expansion(self._source, axes)
 
