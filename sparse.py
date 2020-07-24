@@ -391,7 +391,7 @@ class SparseBroadcast(Broadcast, SparseRebase):
 
 class SparseExpansion(Expansion, SparseRebase):
     def __init__(self, source, axis):
-        Expansion.__init__(self, source, axis)
+        Expansion.__init__(self, source, {axis: 1})
         SparseRebase.__init__(self, source, self.shape)
 
     def filled_at(self, axes):

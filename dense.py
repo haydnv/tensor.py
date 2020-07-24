@@ -225,7 +225,7 @@ class BlockTensorBroadcast(BlockTensorDerived, Broadcast):
 
 class BlockTensorExpansion(BlockTensorDerived, Expansion):
     def __init__(self, source, axis):
-        Expansion.__init__(self, source, axis)
+        Expansion.__init__(self, source, {axis: 1})
         BlockTensorDerived.__init__(self, source, self.shape)
 
 

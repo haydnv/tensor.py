@@ -107,7 +107,7 @@ class Tensor(object):
         raise NotImplementedError
 
     def expand_dims(self, axis):
-        return Expansion(self, axis)
+        return Expansion(self, {axis: 1})
 
     def product(self, _axis):
         raise NotImplementedError
@@ -197,36 +197,62 @@ class Broadcast(Rebase):
 
 
 class Expansion(Rebase):
-    def __init__(self, source, axis):
-        if axis > source.ndim:
+    def __init__(self, source, axes):
+        if (np.array(list(axes.keys())) >= source.ndim).any():
+            raise IndexError
+        elif (np.array(list(axes.values())) <= 0).any():
             raise ValueError
 
-        shape = list(source.shape)
-        shape.insert(axis, 1)
+        shape = []
+        for source_axis in range(source.ndim):
+            if source_axis in axes:
+                shape.extend([1] * axes[source_axis])
+            shape.append(source.shape[source_axis])
+
         Rebase.__init__(self, source, shape)
 
-        self._expand = axis
+        self._expand = axes
 
     def _invert_coord(self, coord):
         validate_match(coord, self.shape)
+        coord = list(coord)
 
-        if len(coord) < self._expand:
-            return coord
-        else:
-            coord = list(coord)
-            del coord[self._expand]
-            return tuple(coord)
+        for axis in range(self._source.ndim):
+            if axis in self._expand:
+                del coord[axis:min(len(coord), axis + self._expand[axis])]
+
+        return tuple(coord)
 
     def _map_coord(self, source_coord):
         validate_match(source_coord, self._source.shape)
 
-        if len(source_coord) < self._expand:
-            return source_coord
-        else:
-            coord = list(source_coord)
-            coord.insert(self._expand, 0)
-            return tuple(coord)
+        coord = []
+        for axis in range(self._source.ndim):
+            if axis in self._expand:
+                coord.extend([0] * self._expand[axis])
 
+            coord.append(source_coord[axis])
+
+        return tuple(coord)
+
+    def expand_dims(self, axis):
+        assert axis < self.ndim
+
+        offset = 0
+        axes = dict(self._expand)
+        for source_axis in range(self._source.ndim):
+            if source_axis in self._expand:
+                start = source_axis + offset
+                offset += self._expand[source_axis]
+                stop = source_axis + offset
+                if axis >= start and axis < stop:
+                    axes[source_axis] += 1
+                    break
+            elif axis == source_axis + offset:
+                axes[source_axis] = 1
+                break
+
+        return Expansion(self._source, axes)
 
 class Permutation(Rebase):
     def __init__(self, source, permutation=None):
