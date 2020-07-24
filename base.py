@@ -321,10 +321,6 @@ class TensorSlice(Rebase):
             else:
                 dest_coord.append(source_coord[axis] - self._offset[axis])
 
-        for axis in range(len(source_coord), self.ndim):
-            if not axis in self._elided:
-                dest_coord.append(None)
-
         assert len(dest_coord) == self.ndim
         return tuple(dest_coord)
 
