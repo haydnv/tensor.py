@@ -3,169 +3,42 @@ import math
 import numpy as np
 import sys
 
-from base import Broadcast, Expansion, Permutation, Rebase, Tensor, TensorSlice
 from base import affected, product, validate_match
-
+from transform import SliceRebase
 
 BLOCK_SIZE = 1000
 BLOCK_OF_COORDS_LEN = BLOCK_SIZE // sys.getsizeof(np.uint64())
 
 
-class BlockTensorView(Tensor):
-    def __init__(self, shape, dtype, per_block = None):
-        Tensor.__init__(self, shape, dtype)
+def shape_of(source_shape, match):
+    shape = []
 
-        if per_block is None:
-            per_block = BLOCK_SIZE // sys.getsizeof(dtype())
-        self._per_block = per_block
+    for axis in range(len(match)):
+        assert match[axis] is not None
+        if isinstance(match[axis], slice):
+            s = match[axis]
+            assert s.start is not None and s.start >= 0 and s.stop is not None and s.stop >= 0
+            shape.append(math.ceil((s.stop - s.start) / s.step))
+        elif isinstance(match[axis], tuple):
+            assert (np.array(match[axis]) >= 0).all()
+            shape.append(len(match[axis]))
 
-    def __eq__(self, other):
-        if not hasattr(other, "shape") or other.shape == tuple():
-            equal_blocks = []
-            for block in self.blocks():
-                equal_blocks.append(block == other)
-            return BlockTensor(self.shape, np.bool, equal_blocks, self._per_block)
-        elif not isinstance(other, BlockTensorView):
-            return Tensor.__eq__(other, self)
+    for axis in range(len(match), len(source_shape)):
+        shape.append(source_shape[axis])
 
-        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
-        this = self.broadcast(shape)
-        that = other.broadcast(shape)
-
-        these_blocks = this.blocks()
-        those_blocks = that.blocks()
-        equal_blocks = []
-        while True:
-            try:
-                this_block = next(these_blocks)
-                that_block = next(those_blocks)
-                assert len(this_block) == len(that_block)
-
-                equal_block = this_block == that_block
-                assert len(equal_block) == len(this_block)
-                equal_blocks.append(equal_block)
-            except StopIteration:
-                break
-
-        return BlockTensor(this.shape, np.bool, equal_blocks, self._per_block)
-
-    def __mul__(self, other):
-        if not hasattr(other, "shape") or other.shape == tuple():
-            mul_blocks = []
-            for block in self.blocks():
-                mul_blocks.append(block * other)
-            return BlockTensor(self.shape, self.dtype, mul_blocks, self._per_block)
-        elif not isinstance(other, BlockTensorView):
-            return other * self
-
-        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
-        this = self.broadcast(shape)
-        that = other.broadcast(shape)
-
-        these_blocks = this.blocks()
-        those_blocks = that.blocks()
-        mul_blocks = []
-        while True:
-            try:
-                this_block = next(these_blocks)
-                that_block = next(those_blocks)
-                assert len(this_block) == len(that_block)
-
-                mul_block = this_block * that_block
-                assert len(mul_block) == len(this_block)
-                mul_blocks.append(mul_block)
-            except StopIteration:
-                break
-
-        return BlockTensor(this.shape, this.dtype, mul_blocks, this._per_block)
-
-    def blocks(self):
-        raise NotImplementedError
-
-    def broadcast(self, shape):
-        if shape == self.shape:
-            return self
-
-        return BlockTensorBroadcast(self, shape)
-
-    def expand_dims(self, axis):
-        return BlockTensorExpansion(self, axis)
-
-    def product(self, axis = None):
-        if axis is None or (axis == 0 and self.ndim == 1):
-            product = 1
-            for block in self.blocks():
-                product *= np.product(block)
-            return product
-
-        assert axis < self.ndim
-        shape = list(self.shape)
-        del shape[axis]
-        product = BlockTensor(shape, self.dtype)
-
-        if axis == 0:
-            for coord in itertools.product(*[range(dim) for dim in shape]):
-                source_coord = (slice(None),) + coord
-                product[coord] = self[source_coord].product()
-        else:
-            prefix_range = [range(self.shape[x]) for x in range(axis)]
-            for prefix in itertools.product(*prefix_range):
-                product[prefix] = self[prefix].product(0)
-
-        return product
-
-    def sum(self, axis = None):
-        if axis is None or (axis == 0 and self.ndim == 1):
-            summed = 0
-            for block in self.blocks():
-                summed += np.sum(block)
-            return summed
-
-        assert axis < self.ndim
-        shape = list(self.shape)
-        del shape[axis]
-        summed = BlockTensor(shape, self.dtype)
-
-        if axis == 0:
-            for coord in itertools.product(*[range(dim) for dim in shape]):
-                source_coord = (slice(None),) + coord
-                summed[coord] = self[source_coord].sum()
-        else:
-            prefix_range = [range(self.shape[x]) for x in range(axis)]
-            for prefix in itertools.product(*prefix_range):
-                summed[prefix] = self[prefix].sum(0)
-
-        return summed
-
-    def transpose(self, permutation=None):
-        return BlockTensorPermutation(self, permutation)
+    return tuple(shape)
 
 
-class BlockTensor(BlockTensorView):
-    @staticmethod
-    def ones(shape, dtype=np.int32):
-        per_block = BLOCK_SIZE // sys.getsizeof(dtype())
-        size = product(shape)
-        blocks = [np.ones([per_block]) for _ in range(size // per_block)]
-        if size % per_block > 0:
-            blocks.append(np.ones([size % per_block]))
-
-        return BlockTensor(shape, dtype, blocks, per_block)
-
-    def __init__(self, shape, dtype=np.int32, blocks=None, per_block=None):
-        BlockTensorView.__init__(self, shape, dtype, per_block)
-
-        if blocks:
-            expected_block_len = self.size if len(blocks) == 1 else per_block
-            assert len(blocks[0]) == expected_block_len
-            self._blocks = blocks
-        else:
-            self._blocks = [
-                np.zeros([self._per_block], dtype)
-                for _ in range(self.size // self._per_block)]
-
-            if self.size % self._per_block > 0:
-                self._blocks.append(np.zeros([self.size % self._per_block], dtype))
+class BlockList(object):
+    def __init__(self, shape, dtype):
+        self.dtype = dtype
+        self.shape = shape
+        self.ndim = len(shape)
+        self.size = product(shape)
+        self._per_block = BLOCK_SIZE // sys.getsizeof(dtype())
+        self._blocks = [np.zeros([self._per_block])] * (self.size // self._per_block)
+        if self.size % self._per_block > 0:
+            self._blocks.append(np.zeros([self.size % self._per_block]))
 
         self._coord_index = np.array([product(shape[axis + 1:]) for axis in range(self.ndim)])
 
@@ -176,7 +49,7 @@ class BlockTensor(BlockTensorView):
             index = sum(np.array(match) * self._coord_index)
             return self._blocks[index // self._per_block][index % self._per_block]
         else:
-            return BlockTensorSlice(self, match)
+            return BlockListSlice(self, match)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
@@ -184,8 +57,6 @@ class BlockTensor(BlockTensorView):
         if len(match) == self.ndim and all(isinstance(c, int) for c in match):
             index = sum(np.array(match) * self._coord_index)
             self._blocks[index // self._per_block][index % self._per_block] = self.dtype(value)
-        elif isinstance(value, Tensor):
-            Tensor.__setitem__(self, match, value)
         else:
             affected_range = itertools.product(*affected(match, self.shape))
             value = self.dtype(value)
@@ -203,52 +74,50 @@ class BlockTensor(BlockTensorView):
                     self._blocks[block_id][offsets[i:(i + num_to_update)]] = value
                     i += num_to_update
 
-    def blocks(self):
-        yield from (block for block in self._blocks)
 
-
-class BlockTensorDerived(BlockTensorView):
-    def __init__(self, source, shape):
-        BlockTensorView.__init__(self, shape, source.dtype)
-
-    def blocks(self):
-        coord_range = itertools.product(*[range(dim) for dim in self.shape])
-        for coords in chunk_iter(coord_range, self._source._per_block):
-            yield np.array([self[coord] for coord in coords])
-
-
-class BlockTensorBroadcast(BlockTensorDerived, Broadcast):
-    def __init__(self, source, shape):
-        Broadcast.__init__(self, source, shape)
-        BlockTensorDerived.__init__(self, source, shape)
-
-
-class BlockTensorExpansion(BlockTensorDerived, Expansion):
-    def __init__(self, source, axis):
-        Expansion.__init__(self, source, {axis: 1})
-        BlockTensorDerived.__init__(self, source, self.shape)
-
-
-class BlockTensorSlice(BlockTensorDerived, TensorSlice):
+class BlockListSlice(object):
     def __init__(self, source, match):
-        TensorSlice.__init__(self, source, match)
-        BlockTensorDerived.__init__(self, source, self.shape)
+        self._source = source
+        self._rebase = SliceRebase(source.shape, match)
+
+    def __getitem__(self, match):
+        return self._source[self._rebase.invert_coord(match)]
+
+    def __setitem__(self, match, value):
+        self._source[self._rebase.invert_coord(match)] = value
 
 
-class BlockTensorPermutation(BlockTensorDerived, Permutation):
-    def __init__(self, source, permutation=None):
-        Permutation.__init__(self, source, permutation)
-        BlockTensorDerived.__init__(self, source, self.shape)
+class DenseTensor(object):
+    def __init__(self, shape, dtype=np.int32, block_list=None):
+        self.dtype = dtype
+        self.shape = shape
+        self.ndim = len(shape)
+        self.size = product(shape)
+
+        if block_list is None:
+            self._block_list = BlockList(shape, dtype)
+        else:
+            self._block_list = block_list
+
+    def __getitem__(self, match):
+        match = validate_match(match, self.shape)
+
+        if len(match) == self.ndim and all(isinstance(c, int) for c in match):
+            return self._block_list[match]
+        else:
+            block_list = self._block_list[match]
+            return DenseTensor(shape_of(self.shape, match), self.dtype, block_list)
+
+    def to_nparray(self):
+        arr = np.zeros(self.shape, self.dtype)
+        for coord in itertools.product(*[range(dim) for dim in self.shape]):
+            arr[coord] = self[coord]
+        return arr
 
 
-def chunk_iter(iterable, chunk_size):
-    chunk = []
-    for item in iterable:
-        chunk.append(item)
-        if len(chunk) == chunk_size:
-            yield chunk
-            chunk = []
-
-    if chunk:
-        yield chunk
+if __name__ == "__main__":
+    dense = DenseTensor([2, 5, 2])
+    ref = np.zeros([2, 5, 2])
+    print(dense[0, slice(None, 4, 2)][slice(0, 3, 3)].to_nparray())
+    print(ref[0, slice(None, 4, 2)][slice(0, 3, 3)])
 

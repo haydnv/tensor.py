@@ -1,6 +1,6 @@
 import numpy as np
 
-from dense import BlockTensor
+from block import BlockTensor
 from sparse import SparseTensor
 
 

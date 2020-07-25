@@ -223,7 +223,7 @@ class Expansion(Rebase):
         if len(coord) == self.ndim and self._source.ndim in self._expand:
             del coord[-1]
 
-        for axis in range(self._source.ndim):
+        for axis in range(min(self._source.ndim, len(coord))):
             if axis in self._expand:
                 del coord[axis:min(len(coord), axis + self._expand[axis])]
 
@@ -240,7 +240,7 @@ class Expansion(Rebase):
             coord.append(source_coord[axis])
 
         if self._source.ndim in self._expand:
-            coord.append(0)
+            coord.extend([0] * self._expand[self._source.ndim])
 
         return tuple(coord)
 

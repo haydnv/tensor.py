@@ -5,7 +5,7 @@ import numpy as np
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expansion, Permutation, Tensor, TensorSlice
 from base import affected, product, validate_match, validate_slice, validate_tuple
-from dense import BlockTensor
+from block import BlockTensor
 
 
 class SparseTensorView(Tensor):
