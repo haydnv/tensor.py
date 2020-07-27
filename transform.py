@@ -2,7 +2,52 @@ import math
 
 from base import validate_match, validate_slice
 
-class SliceRebase(object):
+
+class Broadcast(object):
+    def __init__(self, source_shape, shape):
+        if len(source_shape) > len(shape):
+            raise ValueError
+
+        broadcast = [True for _ in range(len(shape))]
+        offset = len(shape) - len(source_shape)
+        for axis in range(offset, len(shape)):
+            if shape[axis] == source_shape[axis - offset]:
+                broadcast[axis] = False
+            elif shape[axis] == 1 or source_shape[axis - offset] == 1:
+                broadcast[axis] = True
+            else:
+                raise ValueError("cannot broadcast")
+
+        self.shape = tuple(shape)
+        self._source_shape = source_shape
+        self._broadcast = broadcast
+        self._offset = offset
+
+    def invert_coord(self, coord):
+        assert len(coord) <= len(self.shape)
+
+        source_coord = []
+        for axis in range(len(self._source_shape)):
+            if self._broadcast[axis + self._offset]:
+                source_coord.append(0)
+            else:
+                source_coord.append(coord[axis + self._offset])
+
+        return tuple(source_coord)
+
+    def map_coord(self, source_coord):
+        assert len(source_coord) == len(self._source_shape)
+
+        coord = [slice(0, dim, 1) for dim in self.shape]
+        print("broadcast", self._broadcast, "offset", self._offset)
+        for axis in range(len(self._source_shape)):
+            if not self._broadcast[axis + self._offset]:
+                coord[axis + self._offset] = source_coord[axis]
+
+        return tuple(coord)
+
+
+class Slice(object):
     def __init__(self, source_shape, match):
         match = validate_match(match, source_shape)
 
@@ -27,9 +72,9 @@ class SliceRebase(object):
             shape.append(source_shape[axis])
             offset[axis] = 0
 
+        self.match = match
+        self.shape = tuple(shape)
         self._source_shape = source_shape
-        self._shape = shape
-        self._match = match
         self._elided = elided
         self._offset = offset
 
@@ -46,29 +91,29 @@ class SliceRebase(object):
             else:
                 dest_coord.append(source_coord[axis] - self._offset[axis])
 
-        assert len(dest_coord) == len(self._shape)
+        assert len(dest_coord) == len(self.shape)
         return tuple(dest_coord)
 
     def invert_coord(self, coord):
         coord = [
             coord[i] if i < len(coord) else slice(None)
-            for i in range(len(self._shape))]
+            for i in range(len(self.shape))]
 
         source_coord = []
         for axis in range(len(self._source_shape)):
             if axis in self._elided:
-                source_coord.append(self._match[axis])
+                source_coord.append(self.match[axis])
                 continue
 
             at = coord.pop(0)
             if at is None:
-                if axis < len(self._match):
-                    source_coord.append(self._match[axis])
+                if axis < len(self.match):
+                    source_coord.append(self.match[axis])
                 else:
                     source_coord.append(None)
             elif isinstance(at, slice):
-                if axis < len(self._match):
-                    match_axis = self._match[axis]
+                if axis < len(self.match):
+                    match_axis = self.match[axis]
                 else:
                     match_axis = validate_slice(slice(None), self._source_shape[axis])
 

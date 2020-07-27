@@ -19,103 +19,52 @@ class Tensor(object):
         self.ndim = len(shape)
         self.size = product(shape)
 
-    def __eq__(self, _other):
+    def __eq__(self, other):
         raise NotImplementedError
 
     def __getitem__(self, _match):
         raise NotImplementedError
 
     def __mul__(self, other):
-        if other.ndim > self.ndim:
-            return other * self
-
         raise NotImplementedError
 
     def __setitem__(self, match, value):
-        dest = self[match]
-        value = value.broadcast(dest.shape)
-
-        for coord in itertools.product(*[range(dim) for dim in dest.shape]):
-            dest[coord] = value[coord]
+        raise NotImplementedError
 
     def __sub__(self, other):
-        left = self
-        right = other
-
-        if left.dtype == np.bool:
-            left = left.as_type(np.uint8)
-
-        if right.dtype == np.bool:
-            right = right.as_type(np.uint8)
-
-        if left.shape == right.shape:
-            pass
-        elif right.ndim > left.ndim:
-            left = left.broadcast(right.shape)
-        else:
-            right = right.broadcast(left.shape)
-
-        subtraction = Tensor(left.shape)
-        for coord in itertools.product(*[range(dim) for dim in left.shape]):
-            subtraction[coord] = left[coord] - right[coord]
-
-        return subtraction
+        raise NotImplementedError
 
     def __str__(self):
         return str(self.to_nparray())
 
     def __xor__(self, other):
-        this = bool(self)
-        that = bool(other)
-
-        if that.ndim > this.ndim:
-            return that ^ this
-
-        if this.shape != that.shape:
-            that = that.broadcast(this.shape)
-
-        xor = Tensor(this.shape, np.bool)
-        for coord in itertools.product(*[range(dim) for dim in this.shape]):
-            xor[coord] = this[coord] ^ that[coord]
-
-        return xor
+        raise NotImplementedError
 
     def all(self):
-        for coord in itertools.product(*[range(dim) for dim in self.shape]):
-            if not self[coord]:
-                return False
-
-        return True
+        raise NotImplementedError
 
     def any(self):
-        for coord in itertools.product(*[range(dim) for dim in self.shape]):
-            if self[coord]:
-                return True
-
-        return False
-
-    def broadcast(self, shape):
-        if shape == self.shape:
-            return self
-
-        return Broadcast(self, shape)
+        raise NotImplementedError
 
     def as_type(self):
+        raise NotImplementedError
+
+    def broadcast(self, shape):
         raise NotImplementedError
 
     def copy(self):
         raise NotImplementedError
 
     def expand_dims(self, axis):
-        return Expansion(self, {axis: 1})
-
-    def product(self, _axis):
         raise NotImplementedError
 
-    def shuffle(self, _axis):
+    def product(self, _axis=None):
         raise NotImplementedError
 
-    def sum(self, _axis):
+    def sum(self, _axis=None):
+        raise NotImplementedError
+
+    def transpose(self, permutation=None):
         raise NotImplementedError
 
     def to_nparray(self):
@@ -124,8 +73,6 @@ class Tensor(object):
             arr[coord] = self[coord]
         return arr
 
-    def transpose(self, permutation=None):
-        return Permutation(self, permutation)
 
 
 class Rebase(Tensor):
@@ -176,7 +123,7 @@ class Broadcast(Rebase):
         raise IndexError
 
     def _invert_coord(self, coord):
-        assert len(coord) <= self.ndim
+        assert len(coord) == self.ndim
 
         source_coord = []
         for axis in range(self._source.ndim):
@@ -442,7 +389,14 @@ def affected(match, shape):
     return affected
 
 def product(iterable):
-    return functools.reduce(lambda p, i: p * i, iterable, 1)
+    p = 1
+    for i in iterable:
+        if i:
+            p *= i
+        else:
+            return 0
+
+    return p
 
 def validate_match(match, shape):
     if not isinstance(match, tuple):

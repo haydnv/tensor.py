@@ -5,7 +5,8 @@ import numpy as np
 from btree.table import Index, Schema, Table
 from base import Broadcast, Expansion, Permutation, Tensor, TensorSlice
 from base import affected, product, validate_match, validate_slice, validate_tuple
-from block import BlockTensor
+
+from dense import DenseTensor
 
 
 class SparseTensorView(Tensor):
@@ -14,7 +15,7 @@ class SparseTensorView(Tensor):
 
     def __eq__(self, other):
         if isinstance(other, self.dtype):
-            eq = BlockTensor.ones(self.shape, np.bool) * (other == self.dtype(0))
+            eq = DenseTensor.ones(self.shape, np.bool) * (other == self.dtype(0))
             for row in self.filled():
                 eq[row[:-1]] = row[-1] == other
             return eq
@@ -22,7 +23,7 @@ class SparseTensorView(Tensor):
             shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
             return self.broadcast(shape) == other.broadcast(shape)
         elif isinstance(other, Tensor):
-            eq = other == other.dtype(0)
+            eq = other == self.dtype(0)
             for row in self.filled():
                 eq[row[:-1]] = row[-1] == other[row[:-1]]
             return eq
@@ -55,7 +56,7 @@ class SparseTensorView(Tensor):
     def __or__(self, other):
         if not hasattr(other, "shape") or other.shape == tuple():
             if other:
-                return BlockTensor.ones(self.shape, np.bool)
+                return DenseTensor.ones(self.shape, np.bool)
             else:
                 return SparseTensor(self.shape, np.bool)
         else:
@@ -199,7 +200,7 @@ class SparseTensorView(Tensor):
         assert axis < self.ndim
         shape = list(self.shape)
         del shape[axis]
-        multiplied = BlockTensor(shape, self.dtype)
+        multiplied = DenseTensor(shape, self.dtype)
 
         if axis == 0:
             for coord in self.filled_at(list(range(1, self.ndim))):
