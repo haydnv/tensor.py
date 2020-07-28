@@ -99,50 +99,6 @@ class Rebase(Tensor):
         raise NotImplementedError
 
 
-class Broadcast(Rebase):
-    def __init__(self, source, shape):
-        if source.ndim > len(shape):
-            raise ValueError
-
-        Rebase.__init__(self, source, shape)
-
-        broadcast = [True for _ in range(self.ndim)]
-        offset = self.ndim - source.ndim
-        for axis in range(offset, self.ndim):
-            if self.shape[axis] == source.shape[axis - offset]:
-                broadcast[axis] = False
-            elif self.shape[axis] == 1 or source.shape[axis - offset] == 1:
-                broadcast[axis] = True
-            else:
-                raise ValueError("cannot broadcast")
-
-        self._broadcast = broadcast
-        self._offset = offset
-
-    def __setitem__(self, _coord, _value):
-        raise IndexError
-
-    def _invert_coord(self, coord):
-        assert len(coord) == self.ndim
-
-        source_coord = []
-        for axis in range(self._source.ndim):
-            if self._broadcast[axis + self._offset]:
-                source_coord.append(0)
-            else:
-                source_coord.append(coord[axis + self._offset])
-
-        return tuple(source_coord)
-
-    def _map_coord(self, source_coord):
-        coord = [slice(None) for _ in range(self.ndim)]
-        for axis in range(self._source.ndim):
-            if not self._broadcast[axis + self._offset]:
-                coord[axis + self._offset] = source_coord[axis]
-
-        return tuple(coord)
-
-
 class Expansion(Rebase):
     def __init__(self, source, axes):
         if (np.array(list(axes.keys())) > source.ndim).any():
@@ -214,6 +170,7 @@ class Expansion(Rebase):
 
         return Expansion(self._source, axes)
 
+
 class Permutation(Rebase):
     def __init__(self, source, permutation=None):
         if not permutation:
@@ -263,111 +220,6 @@ class Permutation(Rebase):
         return tuple(coord[self._permutation[axis]] for axis in range(len(coord)))
 
 
-class TensorSlice(Rebase):
-    def __init__(self, source, match):
-        match = validate_match(match, source.shape)
-
-        shape = []
-        offset = {}
-        elided = []
-
-        for axis in range(len(match)):
-            if match[axis] is None:
-                shape.append(source.shape[axis])
-                offset[axis] = 0
-            elif isinstance(match[axis], slice):
-                s = match[axis]
-                shape.append(math.ceil((s.stop - s.start) / s.step))
-                offset[axis] = s.start
-            elif isinstance(match[axis], tuple):
-                shape.append(len(match[axis]))
-            else:
-                elided.append(axis)
-
-        for axis in range(len(match), source.ndim):
-            shape.append(source.shape[axis])
-            offset[axis] = 0
-
-        Rebase.__init__(self, source, tuple(shape))
-        self._source = source
-        self._match = match
-        self._elided = elided
-        self._offset = offset
-
-    def _map_coord(self, source_coord):
-        assert len(source_coord) == self._source.ndim
-        dest_coord = []
-        for axis in range(self._source.ndim):
-            if axis in self._elided:
-                pass
-            elif isinstance(source_coord[axis], slice):
-                raise NotImplementedError
-            elif isinstance(source_coord[axis], tuple):
-                dest_coord.append(tuple(c - self._offset[axis] for c in source_coord[axis]))
-            else:
-                dest_coord.append(source_coord[axis] - self._offset[axis])
-
-        assert len(dest_coord) == self.ndim
-        return tuple(dest_coord)
-
-    def _invert_coord(self, coord):
-        coord = [
-            coord[i] if i < len(coord) else slice(None)
-            for i in range(self.ndim)]
-
-        source_coord = []
-        for axis in range(self._source.ndim):
-            if axis in self._elided:
-                source_coord.append(self._match[axis])
-                continue
-
-            at = coord.pop(0)
-            if at is None:
-                if axis < len(self._match):
-                    source_coord.append(self._match[axis])
-                else:
-                    source_coord.append(None)
-            elif isinstance(at, slice):
-                if axis < len(self._match):
-                    match_axis = self._match[axis]
-                else:
-                    match_axis = validate_slice(slice(None), self._source.shape[axis])
-
-                if isinstance(match_axis, slice):
-                    if at.start is None:
-                        start = match_axis.start
-                    elif at.start < 0:
-                        start = match_axis.stop + at.start
-                    else:
-                        start = at.start + match_axis.start
-
-                    if at.step is None or at.step == 1:
-                        step = match_axis.step
-                    else:
-                        step = match_axis.step * at.step
-
-                    if at.stop is None:
-                        stop = match_axis.stop
-                    elif at.stop < 0:
-                        stop = match_axis.stop - (match_axis.step * abs(at.stop))
-                    else:
-                        at = validate_slice(at, (match_axis.stop - match_axis.start))
-                        stop = start + (match_axis.step * (at.stop - at.start))
-
-                    source_coord.append(slice(start, stop, step))
-                else:
-                    if at.start != 0:
-                        raise IndexError
-
-                    source_coord.append(match[axis])
-            elif isinstance(at, tuple):
-                source_coord.append(tuple(c + self._offset[axis] for c in at))
-            else:
-                source_coord.append(at + self._offset[axis])
-
-        return tuple(source_coord)
-
-
 def affected(match, shape):
     affected = []
     for axis in range(len(match)):
@@ -388,6 +240,7 @@ def affected(match, shape):
 
     return affected
 
+
 def product(iterable):
     p = 1
     for i in iterable:
@@ -397,6 +250,7 @@ def product(iterable):
             return 0
 
     return p
+
 
 def validate_match(match, shape):
     if not isinstance(match, tuple):
