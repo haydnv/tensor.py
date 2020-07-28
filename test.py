@@ -17,11 +17,13 @@ def test_eq():
     dims = [2, 1]
     sparse = SparseTensor(dims)
     dense = DenseTensor(dims)
+    ref = np.zeros(dims)
     sparse[slice(1, None, 1)] = 3
     dense[slice(1, None, 1)] = 3
+    ref[slice(1, None, 1)] = 3
+    assert (sparse == dense).all()
     assert (sparse[0].to_nparray() == sparse.to_nparray()[0]).all()
     assert (dense[0].to_nparray() == dense.to_nparray()[0]).all()
-    assert (sparse == dense).all()
 
     dims = [5, 7, 1, 12]
     a = SparseTensor(dims)

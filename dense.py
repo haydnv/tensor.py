@@ -59,6 +59,11 @@ class BlockListBase(BlockList):
                 blocks.append(np.zeros([self.size % PER_BLOCK], dtype))
         else:
             assert len(blocks) == math.ceil(self.size / PER_BLOCK)
+            for block in blocks[:-1]:
+                assert block.shape == (PER_BLOCK,)
+
+            if self.size % PER_BLOCK:
+                assert blocks[-1].shape == (self.size % PER_BLOCK,)
 
         self._blocks = blocks
         self._coord_index = np.array(
@@ -105,10 +110,11 @@ class BlockListBase(BlockList):
                 for block_id in np.unique(block_ids):
                     num_values = np.sum(block_ids == block_id)
                     block_offsets = offsets[:num_values]
-                    offsets = offsets[num_values:]
                     block_values = value[:num_values]
-                    value = value[num_values:]
                     self._blocks[block_id][block_offsets] = np.array(block_values)
+
+                    offsets = offsets[num_values:]
+                    value = value[num_values:]
 
 
 class BlockListRebase(BlockList):
@@ -160,28 +166,27 @@ class BlockListSparse(BlockList):
 
     def __iter__(self):
         shape = np.array(self.shape)
-        for offset in range(0, self.size, PER_BLOCK):
+        for offset in range(PER_BLOCK, self.size, PER_BLOCK):
             # TODO: query source.filled_in instead
             block = []
-            offsets = np.expand_dims(np.arange(offset, offset + PER_BLOCK), 1)
+            offsets = np.expand_dims(np.arange(offset - PER_BLOCK, offset), 1)
             coords = np.reshape((offsets // self._coord_index) % shape, [PER_BLOCK, self.ndim])
             for coord in coords:
                 coord = tuple(int(c) for c in coord)
-                
                 block.append(self._source[coord])
 
             yield np.array(block)
 
         trailing_len = self.size % PER_BLOCK
-        if trailing_len:
-            block = []
-            offsets = np.expand_dims(np.arange(self.size - trailing_len, self.size), 1)
-            coords = np.reshape((offsets // self._coord_index) % shape, [trailing_len, self.ndim])
-            for coord in coords:
-                coord = tuple(int(c) for c in coord)
-                block.append(self._source[coord])
+        trailing_len = trailing_len if trailing_len else PER_BLOCK
+        block = []
+        offsets = np.expand_dims(np.arange(self.size - trailing_len, self.size), 1)
+        coords = np.reshape((offsets // self._coord_index) % shape, [trailing_len, self.ndim])
+        for coord in coords:
+            coord = tuple(int(c) for c in coord)
+            block.append(self._source[coord])
 
-            yield np.array(block)
+        yield np.array(block)
 
     def broadcast(self, shape):
         return BlockListSparse(self._source.broadcast(shape))
@@ -204,6 +209,7 @@ class DenseTensor(Tensor):
         if block_list is None:
             self._block_list = BlockListBase(shape, dtype)
         else:
+            assert isinstance(block_list, BlockList)
             assert block_list.dtype == self.dtype
             assert block_list.shape == self.shape
             self._block_list = block_list
@@ -213,11 +219,20 @@ class DenseTensor(Tensor):
             blocks = [block == other for block in self._block_list]
             block_list = BlockListBase(self.shape, np.bool, blocks)
             return DenseTensor(self.shape, np.bool, block_list)
+        elif not isinstance(other, DenseTensor):
+            other = DenseTensor.from_sparse(other)
 
+        if other.shape != self.shape:
+            other = other.broadcast(self.shape)
         if self.shape != other.shape:
-            return False
+            return self.broadcast(other.shape) == other
 
-        blocks = zip(iter(self._block_list), iter(other._block_list))
+        left = list(iter(self._block_list))
+        right = list(iter(other._block_list))
+        assert len(left) == len(right)
+        blocks = list(zip(left, right))
+        for l, r in blocks:
+            assert l.shape == r.shape
         blocks = [left == right for left, right in blocks]
         block_list = BlockListBase(self.shape, np.bool, blocks)
         return DenseTensor(self.shape, np.bool, block_list)

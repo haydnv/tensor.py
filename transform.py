@@ -39,7 +39,6 @@ class Broadcast(object):
         assert len(source_coord) == len(self._source_shape)
 
         coord = [slice(0, dim, 1) for dim in self.shape]
-        print("broadcast", self._broadcast, "offset", self._offset)
         for axis in range(len(self._source_shape)):
             if not self._broadcast[axis + self._offset]:
                 coord[axis + self._offset] = source_coord[axis]
