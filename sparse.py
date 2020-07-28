@@ -74,8 +74,11 @@ class SparseTable(SparseAddressor):
         for row in table:
             yield (tuple(row[:-1]), row[-1])
 
-    def filled_count(self):
-        return self.table.count()
+    def filled_count(self, match=None):
+        if match is None:
+            return self.table.count()
+        else:
+            return slice_table(self.table, match, self.shape).count()
 
     def _delete_filled(self, match):
         slice_table(self.table, match, self.shape).delete()
@@ -103,13 +106,22 @@ class SparseRebase(SparseAddressor):
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
+    def filled_count(self, match=None):
+        if match:
+            match = self._rebase._invert_coord(match)
+
+        return self._source.filled_count(match)
+    
 
 class SparseBroadcast(SparseRebase):
     def __init__(self, source, shape):
         rebase = transform.Broadcast(source.shape, shape)
         SparseRebase.__init__(self, rebase, source)
 
-    def filled(self):
+    def filled(self, match=None):
+        if match:
+            match = self._invert_coord(match)
+
         for coord, value in self._source.filled():
             coord = self._rebase.map_coord(coord)
             coord_range = []
@@ -141,6 +153,14 @@ class SparseTableSlice(SparseRebase):
 
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
+
+    def filled_count(self, match=None):
+        if match:
+            match = self._invert_coord(match)
+        else:
+            match = self._match
+
+        return self._source.filled_count(match)
 
 
 class SparseTensor(Tensor):
@@ -179,6 +199,27 @@ class SparseTensor(Tensor):
             slice_accessor = self.accessor[match]
             return SparseTensor(slice_accessor.shape, self.dtype, slice_accessor)
 
+    def __mul__(self, other):
+        if not isinstance(other, Tensor) and np.array(other).shape == tuple():
+            multiplied = SparseTensor(self.shape, self.dtype)
+            for coord, value in self.filled():
+                multiplied[coord] = value * other
+            return multiplied
+
+        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+        this = self.broadcast(shape)
+        that = other.broadcast(shape)
+
+        multiplied = SparseTensor(this.shape, this.dtype)
+        if isinstance(that, SparseTensor) and that.filled_count() < this.filled_count():
+            for coord, value in that.filled():
+                multiplied[coord] = value * this[coord]
+        else:
+            for coord, value in this.filled():
+                multiplied[coord] = value * that[coord]
+
+        return multiplied
+
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
         self.accessor[match] = value
@@ -189,6 +230,9 @@ class SparseTensor(Tensor):
 
     def filled(self):
         yield from self.accessor.filled()
+
+    def filled_count(self):
+        return self.accessor.filled_count()
 
     def to_nparray(self):
         dense = np.zeros(self.shape, self.dtype)

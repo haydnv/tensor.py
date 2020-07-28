@@ -394,11 +394,11 @@ if __name__ == "__main__":
     test_eq()
     test_setitem()
     test_getitem()
-#    test_broadcast()
+    test_broadcast()
+    test_multiply()
 #    test_sum()
 #    test_product()
 #    test_expand_dims()
 #    test_transpose()
-#    test_multiply()
     print("PASS")
 

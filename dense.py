@@ -36,6 +36,9 @@ class BlockList(object):
         self.ndim = len(shape)
         self.size = product(shape)
 
+    def broadcast(self, shape):
+        return BlockListBroadcast(self, shape)
+
 
 class BlockListBase(BlockList):
     @staticmethod
@@ -132,6 +135,17 @@ class BlockListRebase(BlockList):
         self._source[self._rebase.invert_coord(match)] = value
 
 
+class BlockListBroadcast(BlockListRebase):
+    def __init__(self, source, shape):
+        rebase = transform.Broadcast(source.shape, shape)
+        BlockListRebase.__init__(self, source, rebase)
+
+    def __iter__(self):
+        coord_range = itertools.product(*[range(dim) for dim in self.shape])
+        for coords in chunk_iter(coord_range, PER_BLOCK):
+            yield np.array([self[coord] for coord in coords])
+
+
 class BlockListSlice(BlockListRebase):
     def __init__(self, source, match):
         rebase = transform.Slice(source.shape, match)
@@ -140,10 +154,7 @@ class BlockListSlice(BlockListRebase):
     def __iter__(self):
         match = affected(self._rebase.match, self._source.shape)
         for coords in chunk_iter(itertools.product(*match), PER_BLOCK):
-            block = []
-            for coord in coords:
-                block.append(self._source[coord])
-            yield np.array(block, self.dtype)
+            yield np.array([self._source[coord] for coord in coords])
 
 
 class BlockListSparse(BlockList):
@@ -254,13 +265,34 @@ class DenseTensor(Tensor):
                 yield block[i]
 
     def __mul__(self, other):
-        if not isinstance(other, DenseTensor):
-            if isinstance(other, Tensor):
-                Tensor.__mul__(self, other)
-            else:
-                blocks = [block * other for block in self._block_list]
-                block_list = BlockListBase(self.shape, self.dtype, blocks)
-                return DenseTensor(self.shape, self.dtype, block_list)
+        if not hasattr(other, "shape") or other.shape == tuple():
+            blocks = [block * other for block in self._block_list]
+            block_list = BlockListBase(self.shape, self.dtype, blocks)
+            return DenseTensor(self.shape, self.dtype, block_list)
+        elif not isinstance(other, DenseTensor):
+            return other * self
+
+        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
+        this = self.broadcast(shape)
+        that = other.broadcast(shape)
+
+        these_blocks = iter(this._block_list)
+        those_blocks = iter(that._block_list)
+        blocks = []
+        while True:
+            try:
+                this_block = next(these_blocks)
+                that_block = next(those_blocks)
+                assert len(this_block) == len(that_block)
+
+                block = this_block * that_block
+                assert len(block) == len(this_block)
+                blocks.append(block)
+            except StopIteration:
+                break
+
+        block_list = BlockListBase(shape, self.dtype, blocks)
+        return DenseTensor(shape, self.dtype, block_list)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
