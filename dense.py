@@ -312,6 +312,29 @@ class DenseTensor(Tensor):
         block_list = self._block_list.broadcast(shape)
         return DenseTensor(shape, self.dtype, block_list)
 
+    def sum(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            summed = 0
+            for block in self._block_list:
+                summed += np.sum(block)
+            return summed
+
+        assert axis < self.ndim
+        shape = list(self.shape)
+        del shape[axis]
+        summed = DenseTensor(shape, self.dtype)
+
+        if axis == 0:
+            for coord in itertools.product(*[range(dim) for dim in shape]):
+                source_coord = (slice(None),) + coord
+                summed[coord] = self[source_coord].sum()
+        else:
+            prefix_range = [range(dim) for dim in self.shape[:axis]]
+            for prefix in itertools.product(*prefix_range):
+                summed[prefix] = self[prefix].sum(0)
+
+        return summed
+
     def to_nparray(self):
         arr = np.zeros(self.shape, self.dtype)
         for coord in itertools.product(*[range(dim) for dim in self.shape]):

@@ -74,6 +74,9 @@ class SparseTable(SparseAddressor):
         for row in table:
             yield (tuple(row[:-1]), row[-1])
 
+    def filled_at(self, axes):
+        yield from self.table.group_by(axes)
+
     def filled_count(self, match=None):
         if match is None:
             return self.table.count()
@@ -105,6 +108,14 @@ class SparseRebase(SparseAddressor):
 
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
+
+    def filled_at(self, axes):
+        group = None
+        for coord, _ in self.filled():
+            filled = tuple(coord[x] for x in axes)
+            if filled != group:
+                group = filled
+                yield filled
 
     def filled_count(self, match=None):
         if match:
@@ -231,8 +242,29 @@ class SparseTensor(Tensor):
     def filled(self):
         yield from self.accessor.filled()
 
+    def filled_at(self, axes):
+        yield from self.accessor.filled_at(axes)
+
     def filled_count(self):
         return self.accessor.filled_count()
+
+    def sum(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            return sum(value for _, value in self.filled())
+
+        assert axis < self.ndim
+        shape = list(self.shape)
+        del shape[axis]
+        summed = SparseTensor(shape, self.dtype)
+
+        if axis == 0:
+            for coord in self.filled_at(list(range(1, self.ndim))):
+                summed[coord] = self[(slice(None),) + coord].sum()
+        else:
+            for prefix in self.filled_at(list(range(axis))):
+                summed[prefix] = self[prefix].sum(0)
+
+        return summed
 
     def to_nparray(self):
         dense = np.zeros(self.shape, self.dtype)
@@ -252,7 +284,7 @@ def slice_table(table, match, shape):
             default = validate_slice(slice(None), shape[axis])
             if coord == default:
                 pass
-            elif coord.step != 1:
+            elif coord.step > 1:
                 selector[axis] = slice(coord.start, coord.stop, 1)
                 if coord.step != 1:
                     steps[axis] = (coord.start, coord.step)

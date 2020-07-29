@@ -185,7 +185,6 @@ def test_getitem():
     assert (sparse[coord].to_nparray() == ref[coord]).all()
     assert (dense[coord].to_nparray() == ref[coord]).all()
 
-
 def test_multiply():
     dims = [3]
     sparse_a = SparseTensor(dims)
@@ -396,7 +395,7 @@ if __name__ == "__main__":
     test_getitem()
     test_broadcast()
     test_multiply()
-#    test_sum()
+    test_sum()
 #    test_product()
 #    test_expand_dims()
 #    test_transpose()
