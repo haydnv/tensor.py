@@ -233,6 +233,12 @@ def test_sum():
     assert (sparse.sum(2).to_nparray() == ref.sum(2)).all()
     assert (dense.sum(2).to_nparray() == ref.sum(2)).all()
 
+    sparse_transpose = sparse.transpose()[:, 0].sum(1).expand_dims(1)
+    dense_transpose = dense.transpose()[:, 0].sum(1).expand_dims(1)
+    ref_transpose = np.expand_dims(np.transpose(ref)[:, 0].sum(1), 1)
+    assert (sparse_transpose.to_nparray() == ref_transpose).all()
+    assert (dense_transpose.to_nparray() == ref_transpose).all()
+
     for axis in range(2):
         sparse = sparse.sum(0)
         dense = dense.sum(0)
@@ -278,6 +284,12 @@ def test_product():
     for axis in range(4):
         assert (sparse.product(axis).to_nparray() == np.product(ref, axis)).all()
         assert (dense.product(axis).to_nparray() == np.product(ref, axis)).all()
+
+    sparse = sparse.transpose()[:, 0].product(1).expand_dims(1)
+    dense = dense.transpose()[:, 0].product(1).expand_dims(1)
+    ref = np.expand_dims(np.product(np.transpose(ref)[:, 0], 1), 1)
+    assert (sparse.to_nparray() == ref).all()
+    assert (dense.to_nparray() == ref).all()
 
 
 def test_expand_dims():
@@ -398,6 +410,6 @@ if __name__ == "__main__":
     test_sum()
     test_product()
     test_expand_dims()
-#    test_transpose()
+    test_transpose()
     print("PASS")
 

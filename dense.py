@@ -3,9 +3,11 @@ import math
 import numpy as np
 import sys
 
+from collections import OrderedDict
+
 import transform
 
-from base import Tensor, affected, product, validate_match
+from tensor import Tensor, affected, product, validate_match
 
 PER_BLOCK = 10
 
@@ -41,6 +43,9 @@ class BlockList(object):
 
     def expand_dims(self, axis):
         return BlockListExpand(self, axis)
+
+    def transpose(self, permutation):
+        return BlockListTranspose(self, permutation)
 
 
 class BlockListBase(BlockList):
@@ -137,16 +142,16 @@ class BlockListRebase(BlockList):
         match = validate_match(match, self.shape)
         self._source[self._rebase.invert_coord(match)] = value
 
+    def __iter__(self):
+        coord_range = itertools.product(*[range(dim) for dim in self.shape])
+        for coords in chunk_iter(coord_range, PER_BLOCK):
+            yield np.array([self[coord] for coord in coords])
+
 
 class BlockListBroadcast(BlockListRebase):
     def __init__(self, source, shape):
         rebase = transform.Broadcast(source.shape, shape)
         BlockListRebase.__init__(self, source, rebase)
-
-    def __iter__(self):
-        coord_range = itertools.product(*[range(dim) for dim in self.shape])
-        for coords in chunk_iter(coord_range, PER_BLOCK):
-            yield np.array([self[coord] for coord in coords])
 
 
 class BlockListExpand(BlockListRebase):
@@ -163,10 +168,30 @@ class BlockListSlice(BlockListRebase):
         rebase = transform.Slice(source.shape, match)
         BlockListRebase.__init__(self, source, rebase)
 
-    def __iter__(self):
-        match = affected(self._rebase.match, self._source.shape)
-        for coords in chunk_iter(itertools.product(*match), PER_BLOCK):
-            yield np.array([self._source[coord] for coord in coords])
+
+class BlockListTranspose(BlockListRebase):
+    def __init__(self, source, permutation):
+        rebase = transform.Transpose(source.shape, permutation)
+        BlockListRebase.__init__(self, source, rebase)
+
+    def __getitem__(self, coord):
+        source = self._source[self._rebase.invert_coord(coord)]
+        if not hasattr(source, "shape") or source.shape == tuple():
+            return source
+
+        permutation = OrderedDict(zip(range(self.ndim), self._rebase.permutation))
+        elided = []
+        for axis in range(len(coord)):
+            if isinstance(coord[axis], int):
+                elided.append(permutation[axis])
+                del permutation[axis]
+
+        for axis in elided:
+            for i in permutation:
+                if permutation[i] > axis:
+                    permutation[i] -= 1
+
+        return source.transpose(list(permutation.values()))
 
 
 class BlockListSparse(BlockList):
@@ -373,6 +398,13 @@ class DenseTensor(Tensor):
                 summed[prefix] = self[prefix].sum(0)
 
         return summed
+
+    def transpose(self, permutation=None):
+        if permutation == list(range(self.ndim)):
+            return self
+
+        block_list = self._block_list.transpose(permutation)
+        return DenseTensor(block_list.shape, self.dtype, block_list)
 
     def to_nparray(self):
         arr = np.zeros(self.shape, self.dtype)

@@ -1,11 +1,13 @@
 import itertools
 import numpy as np
 
+from collections import OrderedDict
+
 import transform
 
-from base import Tensor, affected, validate_match, validate_slice, product
 from btree.table import Index, Schema, Table
 from dense import DenseTensor
+from tensor import Tensor, affected, validate_match, validate_slice, product
 
 
 class SparseAddressor(object):
@@ -17,6 +19,10 @@ class SparseAddressor(object):
 
     def expand_dims(self, axis):
         return SparseExpansion(self, axis)
+
+    def transpose(self, axes):
+        return SparseTranspose(self, axes)
+
 
 class SparseTable(SparseAddressor):
     def __init__(self, shape, dtype, table=None):
@@ -71,8 +77,8 @@ class SparseTable(SparseAddressor):
                 for coord in itertools.product(*affected_range):
                     self.table.upsert(coord, (value,))
 
-    def filled(self, match=None):
-        table = self.table if match is None else slice_table(self.table, match, self.shape)
+    def filled(self, match=None, order=None):
+        table = self.table if match is None else slice_table(self.table, match, self.shape, order)
         for row in table:
             yield (tuple(row[:-1]), row[-1])
 
@@ -104,11 +110,14 @@ class SparseRebase(SparseAddressor):
         match = self._rebase.invert_coord(match)
         self._source[match] = value
 
-    def filled(self, match=None):
+    def filled(self, match=None, order=None):
         if match:
             match = self._rebase.invert_coord(match)
 
-        for coord, value in self._source.filled(match):
+        if order:
+            order = self._rebase.invert_axes(order)
+
+        for coord, value in self._source.filled(match, order):
             yield (self._rebase.map_coord(coord), value)
 
     def filled_at(self, axes):
@@ -131,11 +140,14 @@ class SparseBroadcast(SparseRebase):
         rebase = transform.Broadcast(source.shape, shape)
         SparseRebase.__init__(self, rebase, source)
 
-    def filled(self, match=None):
+    def filled(self, match=None, order=None):
         if match:
-            match = self._invert_coord(match)
+            match = self._rebase.invert_coord(match)
 
-        for coord, value in self._source.filled():
+        if order:
+            order = self._rebase.invert_axes(order)
+
+        for coord, value in self._source.filled(match, order):
             coord = self._rebase.map_coord(coord)
             coord_range = []
             for axis in range(self.ndim):
@@ -154,7 +166,6 @@ class SparseBroadcast(SparseRebase):
 
 class SparseExpansion(SparseRebase):
     def __init__(self, source, axis):
-        assert axis <= source.ndim
         rebase = transform.Expand(source.shape, axis)
         SparseRebase.__init__(self, rebase, source)
 
@@ -165,22 +176,60 @@ class SparseTableSlice(SparseRebase):
         rebase = transform.Slice(source.shape, self._match)
         SparseRebase.__init__(self, rebase, source)
 
-    def filled(self, match=None):
+    def filled(self, match=None, order=None):
         if match:
-            match = self._invert_coord(match)
+            match = self._rebase.invert_coord(match)
         else:
             match = self._match
 
-        for coord, value in self._source.filled(match):
+        if order:
+            order = self._rebase.invert_axes(order)
+
+        for coord, value in self._source.filled(match, order):
             yield (self._rebase.map_coord(coord), value)
 
     def filled_count(self, match=None):
         if match:
-            match = self._invert_coord(match)
+            match = self._rebase.invert_coord(match)
         else:
             match = self._match
 
         return self._source.filled_count(match)
+
+
+class SparseTranspose(SparseRebase):
+    def __init__(self, source, permutation=None):
+        rebase = transform.Transpose(source.shape, permutation)
+        SparseRebase.__init__(self, rebase, source)
+
+    def __getitem__(self, coord):
+        source = self._source[self._rebase.invert_coord(coord)]
+        if not hasattr(source, "shape") or source.shape == tuple():
+            return source
+
+        permutation = OrderedDict(zip(range(self.ndim), self._rebase.permutation))
+        elided = []
+        for axis in range(len(coord)):
+            if isinstance(coord[axis], int):
+                elided.append(permutation[axis])
+                del permutation[axis]
+
+        for axis in elided:
+            for i in permutation:
+                if permutation[i] > axis:
+                    permutation[i] -= 1
+
+        return source.transpose(list(permutation.values()))
+
+    def filled(self, match=None, order=None):
+        if match:
+            match = self._rebase.invert_coord(match)
+
+        if order:
+            order = self._rebase.invert_axes(order)
+
+        for coord, value in self._source.filled(match, self._rebase.permutation):
+            yield (self._rebase.map_coord(coord), value)
 
 
 class SparseTensor(Tensor):
@@ -251,6 +300,9 @@ class SparseTensor(Tensor):
         return self.accessor.filled_count() > 0
 
     def broadcast(self, shape):
+        if shape == self.shape:
+            return self
+
         accessor = SparseBroadcast(self.accessor, shape)
         return SparseTensor(accessor.shape, self.dtype, accessor)
 
@@ -306,6 +358,13 @@ class SparseTensor(Tensor):
 
         return summed
 
+    def transpose(self, permutation=None):
+        if permutation == list(range(self.ndim)):
+            return self
+
+        accessor = self.accessor.transpose(permutation)
+        return SparseTensor(accessor.shape, self.dtype, accessor)
+
     def to_nparray(self):
         dense = np.zeros(self.shape, self.dtype)
         for (coord, value) in self.filled():
@@ -314,7 +373,7 @@ class SparseTensor(Tensor):
         return dense
 
 
-def slice_table(table, match, shape):
+def slice_table(table, match, shape, order=None):
     selector = {}
     steps = {}
     for axis in range(len(match)):
@@ -334,6 +393,10 @@ def slice_table(table, match, shape):
             selector[axis] = coord
 
     table_slice = table.slice(selector)
+
+    if order:
+        table_slice = table_slice.order_by(order)
+
     if steps:
         def step_filter(row):
             step_match = all(

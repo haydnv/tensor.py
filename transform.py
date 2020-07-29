@@ -1,6 +1,8 @@
 import math
 
-from base import validate_match, validate_slice
+from collections import OrderedDict
+
+from tensor import validate_match, validate_slice
 
 
 class Broadcast(object):
@@ -10,18 +12,25 @@ class Broadcast(object):
 
         broadcast = [True for _ in range(len(shape))]
         offset = len(shape) - len(source_shape)
+        inverted_axes = []
         for axis in range(offset, len(shape)):
             if shape[axis] == source_shape[axis - offset]:
                 broadcast[axis] = False
+                inverted_axes.append(axis)
             elif shape[axis] == 1 or source_shape[axis - offset] == 1:
                 broadcast[axis] = True
+                inverted_axes.append(axis - offset)
             else:
                 raise ValueError("cannot broadcast")
 
         self.shape = tuple(shape)
+        self._inverted_axes = inverted_axes
         self._source_shape = source_shape
         self._broadcast = broadcast
         self._offset = offset
+
+    def invert_axes(self, axes):
+        return tuple(OrderedDict.fromkeys(self._inverted_axes[x] for x in axes))
 
     def invert_coord(self, coord):
         assert len(coord) <= len(self.shape)
@@ -52,11 +61,17 @@ class Expand(object):
 
         self._source_shape = shape
 
+        inverted_axes = list(range(len(shape)))
+        inverted_axes.insert(axis, axis)
+
         shape = list(shape)
         shape.insert(axis, 1)
 
         self.shape = tuple(shape)
         self._expand = axis
+
+    def invert_axes(self, axes):
+        return tuple(OrderedDict.fromkeys(self._inverted_axes[x] for x in axes))
 
     def invert_coord(self, coord):
         validate_match(coord, self.shape)
@@ -86,26 +101,32 @@ class Slice(object):
         shape = []
         offset = {}
         elided = []
+        inverted_axes = []
 
         for axis in range(len(match)):
             if match[axis] is None:
                 shape.append(source_shape[axis])
+                inverted_axes.append(axis)
                 offset[axis] = 0
             elif isinstance(match[axis], slice):
                 s = match[axis]
                 shape.append(math.ceil((s.stop - s.start) / s.step))
+                inverted_axes.append(axis)
                 offset[axis] = s.start
             elif isinstance(match[axis], tuple):
                 shape.append(len(match[axis]))
+                inverted_axes.append(axis)
             else:
                 elided.append(axis)
 
         for axis in range(len(match), len(source_shape)):
             shape.append(source_shape[axis])
+            inverted_axes.append(axis)
             offset[axis] = 0
 
         self.match = match
         self.shape = tuple(shape)
+        self._inverted_axes = inverted_axes
         self._source_shape = source_shape
         self._elided = elided
         self._offset = offset
@@ -125,6 +146,11 @@ class Slice(object):
 
         assert len(dest_coord) == len(self.shape)
         return tuple(dest_coord)
+
+    def invert_axes(self, axes):
+        assert len(axes) <= len(self.shape)
+        assert all(x < len(self.shape) for x in axes)
+        return tuple(self._inverted_axes[x] for x in axes)
 
     def invert_coord(self, coord):
         coord = [
@@ -182,4 +208,36 @@ class Slice(object):
                 source_coord.append(at + self._offset[axis])
 
         return tuple(source_coord)
+
+
+class Transpose(object):
+    def __init__(self, shape, permutation=None):
+        if not permutation:
+            permutation = list(reversed(list(axis for axis in range(len(shape)))))
+
+        assert len(permutation) == len(shape)
+        assert all(permutation[axis] < len(shape) for axis in range(len(permutation)))
+
+        self.permutation = permutation
+        self.shape = tuple(shape[permutation[axis]] for axis in range(len(permutation)))
+        self._inverted_axes = dict(zip(range(len(self.shape)), self.permutation))
+
+    def invert_axes(self, axes):
+        return tuple(self._inverted_axes[x] for x in axes)
+
+    def invert_coord(self, coord):
+        if not isinstance(coord, tuple):
+            coord = (coord,)
+
+        source_coord = [slice(None)] * len(self.shape)
+        for axis in range(len(coord)):
+            source_coord[self.permutation[axis]] = coord[axis]
+
+        return tuple(source_coord)
+
+    def map_coord(self, coord):
+        if not isinstance(coord, tuple):
+            coord = (coord,)
+
+        return tuple(coord[self.permutation[axis]] for axis in range(len(coord)))
 
