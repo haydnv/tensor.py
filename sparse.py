@@ -235,6 +235,12 @@ class SparseTensor(Tensor):
         match = validate_match(match, self.shape)
         self.accessor[match] = value
 
+    def all(self):
+        return self.accessor.filled_count() == self.size
+
+    def any(self):
+        return self.accessor.filled_count() > 0
+
     def broadcast(self, shape):
         accessor = SparseBroadcast(self.accessor, shape)
         return SparseTensor(accessor.shape, self.dtype, accessor)
@@ -247,6 +253,27 @@ class SparseTensor(Tensor):
 
     def filled_count(self):
         return self.accessor.filled_count()
+
+    def product(self, axis = None):
+        if axis is None or (axis == 0 and self.ndim == 1):
+            if self.all():
+                return product(value for _, value in self.filled())
+            else:
+                return self.dtype(0)
+
+        assert axis < self.ndim
+        shape = list(self.shape)
+        del shape[axis]
+        multiplied = SparseTensor(shape, self.dtype)
+
+        if axis == 0:
+            for coord in self.filled_at(list(range(1, self.ndim))):
+                multiplied[coord] = self[(slice(None),) + coord].product()
+        else:
+            for prefix in self.filled_at(list(range(axis))):
+                multiplied[prefix] = self[prefix].product(0)
+
+        return multiplied
 
     def sum(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
