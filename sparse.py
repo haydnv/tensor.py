@@ -15,6 +15,8 @@ class SparseAddressor(object):
         self.shape = shape
         self.size = product(shape)
 
+    def expand_dims(self, axis):
+        return SparseExpansion(self, axis)
 
 class SparseTable(SparseAddressor):
     def __init__(self, shape, dtype, table=None):
@@ -150,6 +152,13 @@ class SparseBroadcast(SparseRebase):
                 yield (tuple(broadcast_coord), value)
 
 
+class SparseExpansion(SparseRebase):
+    def __init__(self, source, axis):
+        assert axis <= source.ndim
+        rebase = transform.Expand(source.shape, axis)
+        SparseRebase.__init__(self, rebase, source)
+
+
 class SparseTableSlice(SparseRebase):
     def __init__(self, source, match):
         self._match = validate_match(match, source.shape)
@@ -243,6 +252,10 @@ class SparseTensor(Tensor):
 
     def broadcast(self, shape):
         accessor = SparseBroadcast(self.accessor, shape)
+        return SparseTensor(accessor.shape, self.dtype, accessor)
+
+    def expand_dims(self, axis):
+        accessor = self.accessor.expand_dims(axis)
         return SparseTensor(accessor.shape, self.dtype, accessor)
 
     def filled(self):

@@ -397,7 +397,7 @@ if __name__ == "__main__":
     test_multiply()
     test_sum()
     test_product()
-#    test_expand_dims()
+    test_expand_dims()
 #    test_transpose()
     print("PASS")
 

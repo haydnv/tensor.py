@@ -39,6 +39,9 @@ class BlockList(object):
     def broadcast(self, shape):
         return BlockListBroadcast(self, shape)
 
+    def expand_dims(self, axis):
+        return BlockListExpand(self, axis)
+
 
 class BlockListBase(BlockList):
     @staticmethod
@@ -144,6 +147,15 @@ class BlockListBroadcast(BlockListRebase):
         coord_range = itertools.product(*[range(dim) for dim in self.shape])
         for coords in chunk_iter(coord_range, PER_BLOCK):
             yield np.array([self[coord] for coord in coords])
+
+
+class BlockListExpand(BlockListRebase):
+    def __init__(self, source, axis):
+        rebase = transform.Expand(source.shape, axis)
+        BlockListRebase.__init__(self, source, rebase)
+
+    def __iter__(self):
+        return iter(self._source)
 
 
 class BlockListSlice(BlockListRebase):
@@ -311,6 +323,10 @@ class DenseTensor(Tensor):
 
         block_list = self._block_list.broadcast(shape)
         return DenseTensor(shape, self.dtype, block_list)
+
+    def expand_dims(self, axis):
+        block_list = self._block_list.expand_dims(axis)
+        return DenseTensor(block_list.shape, self.dtype, block_list)
 
     def product(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):

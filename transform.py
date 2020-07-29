@@ -45,6 +45,39 @@ class Broadcast(object):
 
         return tuple(coord)
 
+class Expand(object):
+    def __init__(self, shape, axis):
+        if axis > len(shape):
+            raise ValueError
+
+        self._source_shape = shape
+
+        shape = list(shape)
+        shape.insert(axis, 1)
+
+        self.shape = tuple(shape)
+        self._expand = axis
+
+    def invert_coord(self, coord):
+        validate_match(coord, self.shape)
+
+        if len(coord) < self._expand:
+            return coord
+        else:
+            coord = list(coord)
+            del coord[self._expand]
+            return tuple(coord)
+
+    def map_coord(self, source_coord):
+        validate_match(source_coord, self._source_shape)
+
+        if len(source_coord) < self._expand:
+            return source_coord
+        else:
+            coord = list(source_coord)
+            coord.insert(self._expand, 0)
+            return tuple(coord)
+
 
 class Slice(object):
     def __init__(self, source_shape, match):
