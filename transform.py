@@ -21,7 +21,7 @@ class Broadcast(object):
                 broadcast[axis] = True
                 inverted_axes.append(axis - offset)
             else:
-                raise ValueError("cannot broadcast")
+                raise ValueError("cannot broadcast", source_shape, shape)
 
         self.shape = tuple(shape)
         self._inverted_axes = inverted_axes
@@ -220,10 +220,9 @@ class Transpose(object):
 
         self.permutation = permutation
         self.shape = tuple(shape[permutation[axis]] for axis in range(len(permutation)))
-        self._inverted_axes = dict(zip(range(len(self.shape)), self.permutation))
 
     def invert_axes(self, axes):
-        return tuple(self._inverted_axes[x] for x in axes)
+        return tuple(self.permutation[x] for x in axes)
 
     def invert_coord(self, coord):
         if not isinstance(coord, tuple):
@@ -236,8 +235,22 @@ class Transpose(object):
         return tuple(source_coord)
 
     def map_coord(self, coord):
+        assert len(coord) == len(self.shape)
+
         if not isinstance(coord, tuple):
             coord = (coord,)
 
         return tuple(coord[self.permutation[axis]] for axis in range(len(coord)))
+
+    def map_coord_axes(self, partial_source_coord, axes):
+        source_coord = {axis: None for axis in range(len(self.shape))}
+        for (axis, i) in zip(axes, partial_source_coord):
+            source_coord[axis] = i
+
+        coord = []
+        for i in range(len(self.permutation)):
+            if source_coord[self.permutation[i]] is not None:
+                coord.append(source_coord[self.permutation[i]])
+
+        return tuple(coord)
 

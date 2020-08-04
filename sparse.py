@@ -17,6 +17,15 @@ class SparseAddressor(object):
         self.shape = shape
         self.size = product(shape)
 
+    def filled(self, match=None):
+        raise NotImplementedError
+
+    def filled_at(self, axes):
+        raise NotImplementedError
+
+    def filled_count(self, axes):
+        raise NotImplementedError
+
     def expand_dims(self, axis):
         return SparseExpansion(self, axis)
 
@@ -117,15 +126,6 @@ class SparseRebase(SparseAddressor):
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
-    def filled_at(self, axes):
-        group = None
-        for coord, _ in self.filled():
-            filled = tuple(coord[x] for x in axes)
-
-            if filled != group:
-                group = filled
-                yield filled
-
     def filled_count(self, match=None):
         if match:
             match = self._rebase._invert_coord(match)
@@ -180,6 +180,16 @@ class SparseTableSlice(SparseRebase):
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
+    def filled_at(self, axes):
+        assert list(axes) == sorted(axes)
+
+        group = None
+        for coord, _ in self.filled():
+            coord = tuple(coord[axis] for axis in axes)
+            if coord != group:
+                group = coord
+                yield group
+
     def filled_count(self, match=None):
         if match:
             match = self._rebase.invert_coord(match)
@@ -217,8 +227,13 @@ class SparseTranspose(SparseRebase):
         if match:
             match = self._rebase.invert_coord(match)
 
-        for coord, value in self._source.filled(match):
+        for (coord, value) in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
+
+    def filled_at(self, axes):
+        for source_coord in self._source.filled_at(self._rebase.invert_axes(axes)):
+            dest_coord = self._rebase.map_coord_axes(source_coord, axes)
+            yield dest_coord
 
 
 class SparseTensor(Tensor):
