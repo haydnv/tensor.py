@@ -77,8 +77,8 @@ class SparseTable(SparseAddressor):
                 for coord in itertools.product(*affected_range):
                     self.table.upsert(coord, (value,))
 
-    def filled(self, match=None, order=None):
-        table = self.table if match is None else slice_table(self.table, match, self.shape, order)
+    def filled(self, match=None):
+        table = self.table if match is None else slice_table(self.table, match, self.shape)
         for row in table:
             yield (tuple(row[:-1]), row[-1])
 
@@ -110,20 +110,18 @@ class SparseRebase(SparseAddressor):
         match = self._rebase.invert_coord(match)
         self._source[match] = value
 
-    def filled(self, match=None, order=None):
+    def filled(self, match=None):
         if match:
             match = self._rebase.invert_coord(match)
 
-        if order:
-            order = self._rebase.invert_axes(order)
-
-        for coord, value in self._source.filled(match, order):
+        for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
     def filled_at(self, axes):
         group = None
         for coord, _ in self.filled():
             filled = tuple(coord[x] for x in axes)
+
             if filled != group:
                 group = filled
                 yield filled
@@ -140,14 +138,11 @@ class SparseBroadcast(SparseRebase):
         rebase = transform.Broadcast(source.shape, shape)
         SparseRebase.__init__(self, rebase, source)
 
-    def filled(self, match=None, order=None):
+    def filled(self, match=None):
         if match:
             match = self._rebase.invert_coord(match)
 
-        if order:
-            order = self._rebase.invert_axes(order)
-
-        for coord, value in self._source.filled(match, order):
+        for coord, value in self._source.filled(match):
             coord = self._rebase.map_coord(coord)
             coord_range = []
             for axis in range(self.ndim):
@@ -176,16 +171,13 @@ class SparseTableSlice(SparseRebase):
         rebase = transform.Slice(source.shape, self._match)
         SparseRebase.__init__(self, rebase, source)
 
-    def filled(self, match=None, order=None):
+    def filled(self, match=None):
         if match:
             match = self._rebase.invert_coord(match)
         else:
             match = self._match
 
-        if order:
-            order = self._rebase.invert_axes(order)
-
-        for coord, value in self._source.filled(match, order):
+        for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
     def filled_count(self, match=None):
@@ -221,14 +213,11 @@ class SparseTranspose(SparseRebase):
 
         return source.transpose(list(permutation.values()))
 
-    def filled(self, match=None, order=None):
+    def filled(self, match=None):
         if match:
             match = self._rebase.invert_coord(match)
 
-        if order:
-            order = self._rebase.invert_axes(order)
-
-        for coord, value in self._source.filled(match, self._rebase.permutation):
+        for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
 
@@ -373,7 +362,7 @@ class SparseTensor(Tensor):
         return dense
 
 
-def slice_table(table, match, shape, order=None):
+def slice_table(table, match, shape):
     selector = {}
     steps = {}
     for axis in range(len(match)):
@@ -393,9 +382,6 @@ def slice_table(table, match, shape, order=None):
             selector[axis] = coord
 
     table_slice = table.slice(selector)
-
-    if order:
-        table_slice = table_slice.order_by(order)
 
     if steps:
         def step_filter(row):
