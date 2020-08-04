@@ -220,7 +220,7 @@ def test_multiply():
 
 
 def test_sum():
-    dims = [2, 3, 4]
+    dims = [2, 3, 4, 5]
     sparse = SparseTensor(dims)
     dense = DenseTensor(dims)
     ref = np.zeros(dims)
@@ -233,9 +233,9 @@ def test_sum():
     assert (sparse.sum(2).to_nparray() == ref.sum(2)).all()
     assert (dense.sum(2).to_nparray() == ref.sum(2)).all()
 
-    sparse_transpose = sparse.transpose()[:, 0].sum(1).expand_dims(1)
-    dense_transpose = dense.transpose()[:, 0].sum(1).expand_dims(1)
-    ref_transpose = np.expand_dims(np.transpose(ref)[:, 0].sum(1), 1)
+    sparse_transpose = sparse.transpose()[:, 0].sum(2).expand_dims(1)
+    dense_transpose = dense.transpose()[:, 0].sum(2).expand_dims(1)
+    ref_transpose = np.expand_dims(np.transpose(ref)[:, 0].sum(2), 1)
     assert (sparse_transpose.to_nparray() == ref_transpose).all()
     assert (dense_transpose.to_nparray() == ref_transpose).all()
 

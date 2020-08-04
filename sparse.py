@@ -91,7 +91,12 @@ class SparseTable(SparseAddressor):
         for row in table:
             yield (tuple(row[:-1]), row[-1])
 
-    def filled_at(self, axes):
+    def filled_at(self, axes, match=None):
+        if match is None:
+            table = self.table
+        else:
+            table = slice_table(self.table, match, self.shape)
+
         yield from self.table.group_by(axes)
 
     def filled_count(self, match=None):
@@ -180,15 +185,14 @@ class SparseTableSlice(SparseRebase):
         for coord, value in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
-    def filled_at(self, axes):
-        assert list(axes) == sorted(axes)
+    def filled_at(self, axes, match=None):
+        if match:
+            match = self._rebase.invert_coord(match)
+        else:
+            match = self._match
 
-        group = None
-        for coord, _ in self.filled():
-            coord = tuple(coord[axis] for axis in axes)
-            if coord != group:
-                group = coord
-                yield group
+        axes = self._rebase.invert_axes(axes)
+        yield from self._source.filled_at(axes, match)
 
     def filled_count(self, match=None):
         if match:
@@ -230,8 +234,12 @@ class SparseTranspose(SparseRebase):
         for (coord, value) in self._source.filled(match):
             yield (self._rebase.map_coord(coord), value)
 
-    def filled_at(self, axes):
-        for source_coord in self._source.filled_at(self._rebase.invert_axes(axes)):
+    def filled_at(self, axes, match=None):
+        axes = self._rebase.invert_axes(axes)
+        if match:
+            match = self._rebase.invert_coord(match)
+
+        for source_coord in self._source.filled_at(axes, match):
             dest_coord = self._rebase.map_coord_axes(source_coord, axes)
             yield dest_coord
 
@@ -318,7 +326,7 @@ class SparseTensor(Tensor):
         yield from self.accessor.filled()
 
     def filled_at(self, axes):
-        yield from self.accessor.filled_at(axes)
+        yield from self.accessor.filled_at(axes, None)
 
     def filled_count(self):
         return self.accessor.filled_count()
