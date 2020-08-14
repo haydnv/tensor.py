@@ -99,17 +99,14 @@ def broadcast(left, right):
     if left.shape == right.shape:
         return (left, right)
     else:
-        left_shape = list(left.shape)
-        right_shape = list(right.shape)
+        while left.ndim < right.ndim:
+            left = left.expand_dims(0)
 
-        offset = abs(len(left_shape) - len(right_shape))
-        if len(left_shape) < len(right_shape):
-            left_shape = ([1] * offset) + left_shape
-        elif len(right_shape) < len(left_shape):
-            right_shape = ([1] * offset) + right_shape
+        while right.ndim < left.ndim:
+            right = right.expand_dims(0)
 
         shape = []
-        for l, r in zip(left_shape, right_shape):
+        for l, r in zip(left.shape, right.shape):
             if l == r:
                 shape.append(l)
             elif l == 1:

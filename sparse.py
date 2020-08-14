@@ -162,24 +162,15 @@ class SparseBroadcast(SparseRebase):
         SparseRebase.__init__(self, rebase, source)
 
     def filled(self, match=None):
-        if match:
-            match = self._rebase.invert_coord(match)
+        match = None if match is None else self._rebase.invert_coord(match)
 
-        for coord, value in self._source.filled(match):
-            coord = self._rebase.map_coord(coord)
-            coord_range = []
-            for axis in range(self.ndim):
-                c = coord[axis]
-                if isinstance(c, slice):
-                    c = validate_slice(c, self.shape[axis])
-                    coord_range.append(range(c.start, c.stop, c.step))
-                elif isinstance(c, tuple):
-                    coord_range.append(list(c))
-                else:
-                    coord_range.append([c])
-
-            for broadcast_coord in itertools.product(*coord_range):
-                yield (tuple(broadcast_coord), value)
+        # TODO: replace use of np.array with DenseTensor
+        source_coords = np.array([c for c, _ in self._source.filled(match)])
+        for coord in self._rebase.map_coords(source_coords):
+            coord = tuple(int(c) for c in coord)
+            source_coord = self._rebase.invert_coord(coord)
+            value = self._source[source_coord]
+            yield (coord, value)
 
 
 class SparseCombine(SparseAddressor):

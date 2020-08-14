@@ -439,10 +439,18 @@ def test_and():
     left_ref[slice(1, 3, 2)] = 2
     left_ref[0, 1] = 1
 
+    actual = (left & right)
+    expected = np.logical_and(left_ref, right_ref)
+
+    assert (actual.to_nparray() == expected).all()
+
     right[2] = True
     right_ref[2] = True
 
-    assert(((left & right).to_nparray() == np.logical_and(left_ref, right_ref)).all())
+    actual = (left & right)
+    expected = np.logical_and(left_ref, right_ref)
+
+    assert (actual.to_nparray() == expected).all()
 
 
 def test_or():
@@ -482,8 +490,8 @@ if __name__ == "__main__":
     test_sum()
     test_product()
     test_expand_dims()
-    test_transpose()
     test_and()
     test_or()
+
     print("PASS")
 
