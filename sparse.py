@@ -140,7 +140,7 @@ class SparseRebase(SparseAddressor):
             match = self._rebase._invert_coord(match)
 
         return self._source.filled_count(match)
-    
+
 
 class SparseBroadcast(SparseRebase):
     def __init__(self, source, shape):
@@ -348,8 +348,14 @@ class SparseTensor(Tensor):
             assert dtype == accessor.dtype
             self.accessor = accessor
 
-    def __and__(self, other):
+    def __or__(self, other):
+        if not isinstance(other, SparseTensor):
+            raise NotImplemented
+
         this, that = broadcast(self, other)
+
+        accessor = SparseCombine(this, that, lambda l, r: l and r, np.bool)
+        return SparseTensor(this.shape, np.bool, accessor)
 
     def __eq__(self, other):
         if isinstance(other, DenseTensor):

@@ -401,6 +401,37 @@ def test_broadcast():
     assert (a2_b2.to_nparray() == ref_a_b).all()
 
 
+def test_and():
+    left = SparseTensor([2], np.bool)
+    right = SparseTensor([2], np.bool)
+
+    assert ((left | right).to_nparray() == np.array([False, False])).all()
+
+    left[0] = True
+    assert((left | right).to_nparray() == np.array([False, False])).all()
+
+    right[1] = True
+    assert((left | right).to_nparray() == np.array([False, False])).all()
+
+    left[1] = True
+    assert((left | right).to_nparray() == np.array([False, True])).all()
+
+    left = SparseTensor([4, 2])
+    left_ref = np.zeros([4, 2])
+    right = SparseTensor([4, 1, 1], np.bool)
+    right_ref = np.zeros([4, 1, 1], np.bool)
+
+    left[slice(1, 3, 2)] = 2
+    left[0, 1] = 1
+    left_ref[slice(1, 3, 2)] = 2
+    left_ref[0, 1] = 1
+
+    right[2] = True
+    right_ref[2] = True
+
+    assert(((left | right).to_nparray() == np.logical_and(left_ref, right_ref)).all())
+
+
 def test_or():
     left = SparseTensor([2], np.bool)
     right = SparseTensor([2], np.bool)
