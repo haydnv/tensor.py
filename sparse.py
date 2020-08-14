@@ -242,9 +242,16 @@ class SparseCombine(SparseAddressor):
                         yield (right_coord, value)
 
         if left_done and not right_done:
-            yield from right
+            for coord, right_value in right:
+                value = self._combinator(self._left.dtype(0), right_value)
+                if value:
+                    yield (coord, value)
+
         elif right_done and not left_done:
-            yield from left
+            for coord, left_value in left:
+                value = self._combinator(left_value, self._right.dtype(0))
+                if value:
+                    yield (coord, value)
 
     def filled_at(self, axes):
         if axes == sorted(axes):
@@ -348,7 +355,7 @@ class SparseTensor(Tensor):
             assert dtype == accessor.dtype
             self.accessor = accessor
 
-    def __or__(self, other):
+    def __and__(self, other):
         if not isinstance(other, SparseTensor):
             raise NotImplemented
 

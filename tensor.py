@@ -102,12 +102,23 @@ def broadcast(left, right):
         left_shape = list(left.shape)
         right_shape = list(right.shape)
 
+        offset = abs(len(left_shape) - len(right_shape))
         if len(left_shape) < len(right_shape):
-            left_shape = [1 for _ in range(len(right_shape) - len(left_shape))] + left_shape
+            left_shape = ([1] * offset) + left_shape
         elif len(right_shape) < len(left_shape):
-            right_shape = [1 for _ in range(len(left_shape) - len(right_shape))] + right_shape
+            right_shape = ([1] * offset) + right_shape
 
-        shape = [max(l, r) for l, r in zip(left_shape, right_shape)]
+        shape = []
+        for l, r in zip(left_shape, right_shape):
+            if l == r:
+                shape.append(l)
+            elif l == 1:
+                shape.append(r)
+            elif r == 1:
+                shape.append(l)
+            else:
+                raise ValueError("cannot broadcast {} with {}".format(left_shape, right_shape))
+
         return (left.broadcast(shape), right.broadcast(shape))
 
 
