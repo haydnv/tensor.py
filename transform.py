@@ -6,25 +6,25 @@ from tensor import validate_match, validate_slice
 
 
 class Broadcast(object):
-    def __init__(self, source_shape, shape):
-        if len(source_shape) > len(shape):
-            print("cannot broadcast {} into {}".format(source_shape, shape))
+    def __init__(self, source_shape, broadcast_shape):
+        if len(source_shape) > len(broadcast_shape):
+            print("cannot broadcast {} into {}".format(source_shape, broadcast_shape))
             raise ValueError
 
-        broadcast = [True for _ in range(len(shape))]
-        offset = len(shape) - len(source_shape)
+        broadcast = [True for _ in range(len(broadcast_shape))]
+        offset = len(broadcast_shape) - len(source_shape)
         inverted_axes = []
-        for axis in range(offset, len(shape)):
-            if shape[axis] == source_shape[axis - offset]:
+        for axis in range(offset, len(broadcast_shape)):
+            if broadcast_shape[axis] == source_shape[axis - offset]:
                 broadcast[axis] = False
                 inverted_axes.append(axis)
-            elif shape[axis] == 1 or source_shape[axis - offset] == 1:
+            elif broadcast_shape[axis] == 1 or source_shape[axis - offset] == 1:
                 broadcast[axis] = True
                 inverted_axes.append(axis - offset)
             else:
-                raise ValueError("cannot broadcast", source_shape, shape)
+                raise ValueError("cannot broadcast", source_shape, broadcast_shape)
 
-        self.shape = tuple(shape)
+        self.shape = tuple(broadcast_shape)
         self._inverted_axes = inverted_axes
         self._source_shape = source_shape
         self._broadcast = broadcast

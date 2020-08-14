@@ -149,7 +149,21 @@ class BlockListRebase(BlockList):
 
 
 class BlockListBroadcast(BlockListRebase):
-    def __init__(self, source, shape):
+    def __init__(self, source, broadcast_shape):
+        source_shape = list(source.shape)
+        offset = len(broadcast_shape) - len(source_shape)
+        if offset:
+            source_shape = ([1] * offset) + source_shape
+
+        shape = []
+        for l, r in zip(source_shape, broadcast_shape):
+            if l == r or r == 1:
+                shape.append(l)
+            elif l == 1:
+                shape.append(r)
+            else:
+                raise ValueError("cannot broadcast {} into {}".format(source.shape, broadcast_shape))
+
         rebase = transform.Broadcast(source.shape, shape)
         BlockListRebase.__init__(self, source, rebase)
 
@@ -345,7 +359,7 @@ class DenseTensor(Tensor):
             return self
 
         block_list = self._block_list.broadcast(shape)
-        return DenseTensor(shape, self.dtype, block_list)
+        return DenseTensor(block_list.shape, self.dtype, block_list)
 
     def expand_dims(self, axis):
         block_list = self._block_list.expand_dims(axis)
