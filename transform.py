@@ -8,6 +8,7 @@ from tensor import validate_match, validate_slice
 class Broadcast(object):
     def __init__(self, source_shape, shape):
         if len(source_shape) > len(shape):
+            print("cannot broadcast {} into {}".format(source_shape, shape))
             raise ValueError
 
         broadcast = [True for _ in range(len(shape))]

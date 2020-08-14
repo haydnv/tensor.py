@@ -23,8 +23,12 @@ class SparseAddressor(object):
     def filled_at(self, axes):
         raise NotImplementedError
 
-    def filled_count(self, axes):
-        raise NotImplementedError
+    def filled_count(self, match):
+        count = 0
+        for _ in self.filled(match):
+            count += 1
+
+        return count
 
     def expand_dims(self, axis):
         return SparseExpansion(self, axis)
@@ -164,6 +168,96 @@ class SparseBroadcast(SparseRebase):
                 yield (tuple(broadcast_coord), value)
 
 
+class SparseCombine(SparseAddressor):
+    def __init__(self, left, right, combinator, dtype):
+        assert left.shape == right.shape
+
+        self._left = left
+        self._right = right
+        self._combinator = combinator
+
+        SparseAddressor.__init__(self, left.shape, dtype)
+
+    def filled(self, match=None):
+        left = self._left.filled()
+        right = self._right.filled()
+
+        left_done = False
+        right_done = False
+
+        left_next = None
+        right_next = None
+
+        while True:
+            if left_next is None:
+                try:
+                    left_next = next(left)
+                except StopIteration:
+                    left_done = True
+
+            if right_next is None:
+                try:
+                    right_next = next(right)
+                except StopIteration:
+                    right_done = True
+
+            if left_done and right_next:
+                value = self._combinator(self._left.dtype(0), right_next[1])
+                if value:
+                    yield (right_next[0], value)
+                    right_next = None
+
+            if right_done and left_next:
+                value = self._combinator(left_next[1], self._right.dtype(0))
+                if value:
+                    yield (left_next[0], value)
+                    left_next = None
+
+            if left_done or right_done:
+                break
+            else:
+                (left_coord, left_value) = left_next
+                (right_coord, right_value) = right_next
+
+                if left_coord == right_coord:
+                    left_next = None
+                    right_next = None
+
+                    value = self._combinator(left_value, right_value)
+                    if value:
+                        yield (left_coord, value)
+
+                elif (np.array(left_coord) <= np.array(right_coord)).all():
+                    left_next = None
+
+                    value = self._combinator(left_value, self._right.dtype(0))
+                    if value:
+                        yield (left_coord, value)
+
+                else:
+                    right_next = None
+
+                    value = self._combinator(self._left.dtype(0), right_value)
+                    if value:
+                        yield (right_coord, value)
+
+        if left_done and not right_done:
+            yield from right
+        elif right_done and not left_done:
+            yield from left
+
+    def filled_at(self, axes):
+        if axes == sorted(axes):
+            group = None
+            for coord, _ in self.filled():
+                filled_at = tuple(coord[axis] for axis in axes)
+                if filled_at != group:
+                    yield filled_at
+                    group = filled_at
+        else:
+            raise NotImplementedError
+
+
 class SparseExpansion(SparseRebase):
     def __init__(self, source, axis):
         rebase = transform.Expand(source.shape, axis)
@@ -287,9 +381,7 @@ class SparseTensor(Tensor):
                 multiplied[coord] = value * other
             return multiplied
 
-        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
-        this = self.broadcast(shape)
-        that = other.broadcast(shape)
+        this, that = broadcast(self, other)
 
         multiplied = SparseTensor(this.shape, this.dtype)
         if isinstance(that, SparseTensor) and that.filled_count() < this.filled_count():
@@ -300,6 +392,15 @@ class SparseTensor(Tensor):
                 multiplied[coord] = value * that[coord]
 
         return multiplied
+
+    def __or__(self, other):
+        if not isinstance(other, SparseTensor):
+            raise NotImplemented
+
+        this, that = broadcast(self, other)
+
+        accessor = SparseCombine(this, that, lambda l, r: l or r, np.bool)
+        return SparseTensor(this.shape, np.bool, accessor)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
@@ -317,6 +418,15 @@ class SparseTensor(Tensor):
 
         accessor = SparseBroadcast(self.accessor, shape)
         return SparseTensor(accessor.shape, self.dtype, accessor)
+
+    def expand(self, new_shape):
+        if len(new_shape) != len(self.shape):
+            return ValueError
+        elif not (np.array(new_shape) >= np.array(self.shape)).all():
+            return ValueError
+
+        self.shape = new_shape
+        self.accessor.shape = new_shape
 
     def expand_dims(self, axis):
         accessor = self.accessor.expand_dims(axis)
@@ -383,6 +493,20 @@ class SparseTensor(Tensor):
             dense[coord] = value
 
         return dense
+
+
+def broadcast(left, right):
+    if left.shape == right.shape:
+        return (left, right)
+    else:
+        while left.ndim < right.ndim:
+            left = left.expand_dims(left.ndim)
+
+        while right.ndim < left.ndim:
+            right = right.expand_dims(right.ndim)
+
+        shape = [max(l, r) for l, r in zip(left.shape, right.shape)]
+        return (left.broadcast(shape), right.broadcast(shape))
 
 
 def slice_table(table, match, shape):
