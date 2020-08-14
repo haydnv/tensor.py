@@ -7,7 +7,7 @@ import transform
 
 from btree.table import Index, Schema, Table
 from dense import DenseTensor
-from tensor import Tensor, affected, validate_match, validate_slice, product
+from tensor import Tensor, affected, broadcast, validate_match, validate_slice, product
 
 
 class SparseAddressor(object):
@@ -348,6 +348,9 @@ class SparseTensor(Tensor):
             assert dtype == accessor.dtype
             self.accessor = accessor
 
+    def __and__(self, other):
+        this, that = broadcast(self, other)
+
     def __eq__(self, other):
         if isinstance(other, DenseTensor):
             return other == self
@@ -493,20 +496,6 @@ class SparseTensor(Tensor):
             dense[coord] = value
 
         return dense
-
-
-def broadcast(left, right):
-    if left.shape == right.shape:
-        return (left, right)
-    else:
-        while left.ndim < right.ndim:
-            left = left.expand_dims(left.ndim)
-
-        while right.ndim < left.ndim:
-            right = right.expand_dims(right.ndim)
-
-        shape = [max(l, r) for l, r in zip(left.shape, right.shape)]
-        return (left.broadcast(shape), right.broadcast(shape))
 
 
 def slice_table(table, match, shape):

@@ -95,6 +95,22 @@ def affected(match, shape):
     return affected
 
 
+def broadcast(left, right):
+    if left.shape == right.shape:
+        return (left, right)
+    else:
+        left_shape = list(left.shape)
+        right_shape = list(right.shape)
+
+        if len(left_shape) < len(right_shape):
+            left_shape = [1 for _ in range(len(right_shape) - len(left_shape))] + left_shape
+        elif len(right_shape) < len(left_shape):
+            right_shape = [1 for _ in range(len(left_shape) - len(right_shape))] + right_shape
+
+        shape = [max(l, r) for l, r in zip(left_shape, right_shape)]
+        return (left.broadcast(shape), right.broadcast(shape))
+
+
 def product(iterable):
     p = 1
     for i in iterable:

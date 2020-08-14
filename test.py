@@ -415,8 +415,8 @@ def test_or():
 
     left = SparseTensor([4, 2])
     left_ref = np.zeros([4, 2])
-    right = SparseTensor([4, 1], np.bool)
-    right_ref = np.zeros([4, 1], np.bool)
+    right = SparseTensor([4, 1, 1], np.bool)
+    right_ref = np.zeros([4, 1, 1], np.bool)
 
     left[slice(1, 3, 2)] = 2
     left[0, 1] = 1

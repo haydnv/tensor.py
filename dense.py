@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 import transform
 
-from tensor import Tensor, affected, product, validate_match
+from tensor import Tensor, affected, broadcast, product, validate_match
 
 PER_BLOCK = 10
 
@@ -309,9 +309,7 @@ class DenseTensor(Tensor):
         elif not isinstance(other, DenseTensor):
             return other * self
 
-        shape = [max(l, r) for l, r in zip(self.shape, other.shape)]
-        this = self.broadcast(shape)
-        that = other.broadcast(shape)
+        this, that = broadcast(self, other)
 
         these_blocks = iter(this._block_list)
         those_blocks = iter(that._block_list)
@@ -328,8 +326,8 @@ class DenseTensor(Tensor):
             except StopIteration:
                 break
 
-        block_list = BlockListBase(shape, self.dtype, blocks)
-        return DenseTensor(shape, self.dtype, block_list)
+        block_list = BlockListBase(this.shape, this.dtype, blocks)
+        return DenseTensor(this.shape, this.dtype, block_list)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
