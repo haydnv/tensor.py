@@ -496,6 +496,25 @@ def test_or():
     assert((actual.to_nparray() == expected).all())
 
 
+def test_graph_traversal():
+    edges = SparseTensor([5, 5], np.bool)
+    edges[2, 3] = True
+
+    adjacent = SparseTensor([5])
+    adjacent[2] = True
+
+    visited = SparseTensor([5])
+
+    visited = visited | adjacent
+    adjacent = (edges.transpose() * adjacent).sum(1)
+    adjacent.mask(visited)
+    assert (adjacent.to_nparray() == np.array([0, 0, 0, 1, 0], np.bool)).all()
+
+    visited = visited | adjacent
+    adjacent = (edges.transpose() * adjacent).sum(1)
+    adjacent.mask(visited)
+    assert (adjacent.to_nparray() == np.zeros(5, np.bool)).all()
+
 if __name__ == "__main__":
     test_eq()
     test_setitem()
@@ -507,6 +526,7 @@ if __name__ == "__main__":
     test_expand_dims()
     test_and()
     test_or()
+    test_graph_traversal()
 
     print("PASS")
 

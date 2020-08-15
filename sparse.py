@@ -213,7 +213,7 @@ class SparseCombine(SparseAddressor):
         SparseAddressor.__init__(self, left.shape, dtype)
 
     def __getitem__(self, match):
-        if len(match) == len(self.shape) and all(isinstance(c for c in match)):
+        if len(match) == len(self.shape) and all(isinstance(c, int) for c in match):
             return self._combinator(self._left[match], self._right[match])
         else:
             return SparseCombine(
