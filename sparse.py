@@ -17,6 +17,9 @@ class SparseAddressor(object):
         self.shape = shape
         self.size = product(shape)
 
+    def broadcast(self, shape):
+        return SparseBroadcast(self, shape)
+
     def filled(self, match=None):
         raise NotImplementedError
 
@@ -160,6 +163,24 @@ class SparseBroadcast(SparseRebase):
 
         rebase = transform.Broadcast(source.shape, shape)
         SparseRebase.__init__(self, rebase, source)
+
+    def __getitem__(self, match):
+        shape = []
+        for axis in range(self.ndim):
+            if axis < len(match):
+                if isinstance(match[axis], int):
+                    pass
+                else:
+                    shape.append(math.ceil((match.stop - match.start) / match.step))
+            else:
+                shape.append(self.shape[axis])
+
+        match = self._rebase.invert_coord(match)
+        value = self._source[match]
+        if shape == []:
+            return value
+        else:
+            return value.broadcast(shape)
 
     def filled(self, match=None):
         match = None if match is None else self._rebase.invert_coord(match)

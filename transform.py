@@ -39,10 +39,14 @@ class Broadcast(object):
 
         source_coord = []
         for axis in range(len(self._source_shape)):
-            if self._broadcast[axis + self._offset]:
-                source_coord.append(0)
+            if axis + self._offset < len(coord):
+                if self._broadcast[axis + self._offset]:
+                    source_coord.append(0)
+                else:
+                    if axis + self._offset < len(coord):
+                        source_coord.append(coord[axis + self._offset])
             else:
-                source_coord.append(coord[axis + self._offset])
+                source_coord.append(slice(0, self._source_shape[axis]))
 
         return tuple(source_coord)
 

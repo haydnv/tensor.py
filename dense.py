@@ -167,6 +167,24 @@ class BlockListBroadcast(BlockListRebase):
         rebase = transform.Broadcast(source.shape, shape)
         BlockListRebase.__init__(self, source, rebase)
 
+    def __getitem__(self, match):
+        shape = []
+        for axis in range(self.ndim):
+            if axis < len(match):
+                if isinstance(match[axis], int):
+                    pass
+                else:
+                    shape.append(math.ceil((match.stop - match.start) / match.step))
+            else:
+                shape.append(self.shape[axis])
+
+        match = self._rebase.invert_coord(match)
+        value = self._source[match]
+        if shape == []:
+            return value
+        else:
+            return value.broadcast(shape)
+
 
 class BlockListExpand(BlockListRebase):
     def __init__(self, source, axis):

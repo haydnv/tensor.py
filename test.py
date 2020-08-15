@@ -414,6 +414,17 @@ def test_broadcast():
     ref_a[2] = True
     assert (a.broadcast([1, 4, 1]).to_nparray() == np.logical_and(ref_a, np.ones([1, 4, 1]))).all()
 
+    a = SparseTensor([4, 1, 1])
+    b = DenseTensor([4, 1, 1])
+    ref = np.zeros([4, 1, 1])
+
+    a = a.broadcast([4, 4, 1])
+    b = b.broadcast([4, 4, 1])
+    ref = np.logical_and(ref, np.ones([4, 4, 1]))
+    assert a[2].shape == b[2].shape
+    assert a[2].shape == ref[2].shape
+    assert b[2].shape == ref[2].shape
+
 def test_and():
     left = SparseTensor([2], np.bool)
     right = SparseTensor([2], np.bool)
