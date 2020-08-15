@@ -233,6 +233,9 @@ class SparseCombine(SparseAddressor):
         left_next = None
         right_next = None
 
+        coord_index = np.array(
+            [product(self.shape[axis + 1:]) for axis in range(len(self.shape))])
+
         while True:
             if left_next is None:
                 try:
@@ -263,8 +266,10 @@ class SparseCombine(SparseAddressor):
             else:
                 (left_coord, left_value) = left_next
                 (right_coord, right_value) = right_next
+                left_index = np.sum(np.array(left_coord) * coord_index)
+                right_index = np.sum(np.array(right_coord) * coord_index)
 
-                if left_coord == right_coord:
+                if left_index == right_index:
                     left_next = None
                     right_next = None
 
@@ -272,19 +277,22 @@ class SparseCombine(SparseAddressor):
                     if value:
                         yield (left_coord, value)
 
-                elif (np.array(left_coord) <= np.array(right_coord)).all():
+                elif left_index < right_index:
                     left_next = None
 
                     value = self._combinator(left_value, self._right.dtype(0))
                     if value:
                         yield (left_coord, value)
 
-                else:
+                elif right_index < left_index:
                     right_next = None
 
                     value = self._combinator(self._left.dtype(0), right_value)
                     if value:
                         yield (right_coord, value)
+
+                else:
+                    raise RuntimeError
 
         if left_done and not right_done:
             for coord, right_value in right:

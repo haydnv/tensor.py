@@ -443,8 +443,8 @@ def test_and():
 
     left = SparseTensor([4, 2])
     left_ref = np.zeros([4, 2])
-    right = SparseTensor([4, 1], np.bool)
-    right_ref = np.zeros([4, 1], np.bool)
+    right = SparseTensor([4, 1, 1], np.bool)
+    right_ref = np.zeros([4, 1, 1], np.bool)
 
     left[slice(1, 3, 2)] = 2
     left[0, 1] = 1
@@ -461,8 +461,6 @@ def test_and():
 
     actual = (left & right)
     expected = np.logical_and(left_ref, right_ref)
-
-    assert (actual[2].to_nparray() == actual.to_nparray()[2]).all()
 
     assert (actual.to_nparray() == expected).all()
 
@@ -492,7 +490,10 @@ def test_or():
     right[2] = True
     right_ref[2] = True
 
-    assert(((left | right).to_nparray() == np.logical_or(left_ref, right_ref)).all())
+    actual = (left | right)
+    expected = np.logical_or(left_ref, right_ref)
+
+    assert((actual.to_nparray() == expected).all())
 
 
 if __name__ == "__main__":
