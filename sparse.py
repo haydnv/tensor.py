@@ -488,14 +488,27 @@ class SparseTensor(Tensor):
         accessor = SparseBroadcast(self.accessor, shape)
         return SparseTensor(accessor.shape, self.dtype, accessor)
 
+    def copy(self):
+        copy = SparseTensor(self.shape, self.dtype)
+        for (coord, value) in self.filled():
+            copy[coord] = value
+
+        return copy
+
     def expand(self, new_shape):
+        if not isinstance(self.accessor, SparseTable):
+            raise NotImplementedError
+
         if len(new_shape) != len(self.shape):
             return ValueError
         elif not (np.array(new_shape) >= np.array(self.shape)).all():
             return ValueError
 
-        self.shape = new_shape
         self.accessor.shape = new_shape
+        self.accessor.size = product(new_shape)
+
+        self.shape = self.accessor.shape
+        self.size = self.accessor.size
 
     def expand_dims(self, axis):
         accessor = self.accessor.expand_dims(axis)
@@ -509,6 +522,17 @@ class SparseTensor(Tensor):
 
     def filled_count(self):
         return self.accessor.filled_count()
+
+    def mask(self, other):
+        if isinstance(other, SparseTensor):
+            for coord, _ in other.filled():
+                self[coord] = self.dtype(0)
+        elif isinstance(other, Tensor):
+            for coord in itertools.product(*[range(dim) for dim in other.shape]):
+                if other[coord]:
+                    self[coord] = self.dtype(0)
+        else:
+            raise ValueError
 
     def product(self, axis = None):
         if axis is None or (axis == 0 and self.ndim == 1):
