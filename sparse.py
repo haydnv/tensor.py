@@ -6,7 +6,7 @@ from collections import OrderedDict
 import transform
 
 from btree.table import Index, Schema, Table
-from dense import DenseTensor
+from dense import DenseTensor, sort_coords
 from tensor import Tensor, affected, broadcast, validate_match, validate_slice, product
 
 
@@ -182,15 +182,23 @@ class SparseBroadcast(SparseRebase):
         else:
             return value.broadcast(shape)
 
+    def _map_coords(self, match):
+        for source_coord, _ in self._source.filled(match):
+            match = self._rebase.map_coord(source_coord)
+            for coord in itertools.product(*affected(match, self.shape)):
+                yield coord
+
     def filled(self, match=None):
         match = None if match is None else self._rebase.invert_coord(match)
 
-        # TODO: replace use of np.array with DenseTensor
-        source_coords = np.array([c for c, _ in self._source.filled(match)])
-        for coord in self._rebase.map_coords(source_coords):
+        coords = self._map_coords(match)
+        coords = sort_coords(coords, self.shape)
+
+        for coord in coords:
             coord = tuple(int(c) for c in coord)
             source_coord = self._rebase.invert_coord(coord)
             value = self._source[source_coord]
+            assert value
             yield (coord, value)
 
 
@@ -204,9 +212,20 @@ class SparseCombine(SparseAddressor):
 
         SparseAddressor.__init__(self, left.shape, dtype)
 
+    def __getitem__(self, match):
+        if len(match) == len(self.shape) and all(isinstance(c for c in match)):
+            return self._combinator(self._left[match], self._right[match])
+        else:
+            return SparseCombine(
+                self._left[match], self._right[match],
+                self._combinator, self.dtype)
+
     def filled(self, match=None):
-        left = self._left.filled()
-        right = self._right.filled()
+        assert list(self._left.filled(match)) == sorted(self._left.filled(match))
+        assert list(self._right.filled(match)) == sorted(self._right.filled(match))
+
+        left = self._left.filled(match)
+        right = self._right.filled(match)
 
         left_done = False
         right_done = False
@@ -387,8 +406,8 @@ class SparseTensor(Tensor):
 
         this, that = broadcast(self, other)
 
-        accessor = SparseCombine(this, that, lambda l, r: l and r, np.bool)
-        return SparseTensor(this.shape, np.bool, accessor)
+        accessor = SparseCombine(this.accessor, that.accessor, lambda l, r: l and r, np.bool)
+        return SparseTensor(accessor.shape, np.bool, accessor)
 
     def __eq__(self, other):
         if isinstance(other, DenseTensor):
@@ -439,7 +458,7 @@ class SparseTensor(Tensor):
         if not isinstance(other, SparseTensor):
             raise NotImplemented
 
-        this, that = broadcast(self, other)
+        this, that = broadcast(self.accessor, other.accessor)
 
         accessor = SparseCombine(this, that, lambda l, r: l or r, np.bool)
         return SparseTensor(this.shape, np.bool, accessor)

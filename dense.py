@@ -454,3 +454,50 @@ def chunk_iter(iterable, chunk_size):
     if chunk:
         yield chunk
 
+def merge_sort(blocks):
+    done = True
+
+    for i in range(len(blocks) - 1):
+        l = blocks[i]
+        r = blocks[i + 1]
+        block = np.concatenate([l, r])
+        block.sort()
+        blocks[i] = block[:PER_BLOCK]
+        blocks[i + 1] = block[PER_BLOCK:]
+
+        if (l != blocks[i]).any() or (r != blocks[i + 1]).any():
+            done = False
+
+    if done:
+        return blocks
+    else:
+        return merge_sort(blocks)
+
+def sort_coords(coords, shape):
+    coord_index = np.array(
+        [product(shape[axis + 1:]) for axis in range(len(shape))])
+
+    shape = np.array(shape)
+    blocks = []
+    num_coords = 0
+    while True:
+        block = []
+
+        while len(block) < PER_BLOCK:
+            try:
+                coord = next(coords)
+                block.append(coord)
+            except StopIteration:
+                break
+
+        if block:
+            num_coords += len(block)
+            offsets = np.sum(block * coord_index, 1)
+            blocks.append(offsets)
+        else:
+            break
+
+    for block in merge_sort(blocks):
+        coords = (np.expand_dims(block, 1) // coord_index) % shape
+        yield from coords
+

@@ -1,9 +1,8 @@
 import math
-import numpy as np
 
 from collections import OrderedDict
 
-from tensor import product, validate_match, validate_slice
+from tensor import affected, product, validate_match, validate_slice
 
 
 class Broadcast(object):
@@ -49,19 +48,6 @@ class Broadcast(object):
                 source_coord.append(slice(0, self._source_shape[axis]))
 
         return tuple(source_coord)
-
-    def map_coords(self, source_coords):
-        if len(source_coords) == 0:
-            return []
-
-        axes = []
-        for axis in range(len(self.shape)):
-            if self._broadcast[axis]:
-                axes.append(np.arange(self.shape[axis]))
-            else:
-                axes.append(source_coords[:, (axis - self._offset)])
-
-        return broadcast_coords(axes)
 
     def map_coord(self, source_coord):
         assert len(source_coord) == len(self._source_shape)
@@ -272,21 +258,4 @@ class Transpose(object):
                 coord.append(source_coord[self.permutation[i]])
 
         return tuple(coord)
-
-# Based on: https://gist.github.com/hernamesbarbara/68d073f551565de02ac5
-def broadcast_coords(axes, coords=None):
-    size = product(x.size for x in axes)
-
-    # TODO: replace NumPy usage with DenseTensor
-    if coords is None:
-        coords = np.zeros([size, len(axes)], np.uint64)
-
-    m = size // axes[0].size
-    coords[:, 0] = np.repeat(axes[0], m)
-    if axes[1:]:
-        broadcast_coords(axes[1:], coords[0:m, 1:])
-        for j in range(1, axes[0].size):
-            coords[j * m : (j + 1) * m, 1:] = coords[0:m, 1:]
-
-    return coords
 

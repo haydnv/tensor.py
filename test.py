@@ -395,6 +395,7 @@ def test_broadcast():
     assert a1_b2.shape == ref_a_b.shape
     assert a2_b1.shape == ref_a_b.shape
     assert a2_b2.shape == ref_a_b.shape
+
     assert (a1_b1.to_nparray() == ref_a_b).all()
     assert (a1_b2.to_nparray() == ref_a_b).all()
     assert (a2_b1.to_nparray() == ref_a_b).all()
@@ -460,6 +461,8 @@ def test_and():
 
     actual = (left & right)
     expected = np.logical_and(left_ref, right_ref)
+
+    assert (actual[2].to_nparray() == actual.to_nparray()[2]).all()
 
     assert (actual.to_nparray() == expected).all()
 
