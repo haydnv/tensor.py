@@ -534,6 +534,13 @@ def test_graph_traversal():
     assert (adjacent.to_nparray() == np.zeros(5, np.bool)).all()
 
 
+def test_identity():
+    eye = SparseTensor.identity(5)
+    ref = np.identity(5)
+    assert (eye.to_nparray() == ref).all()
+    assert (eye[1, slice(0, None, 2)].to_nparray() == ref[1, slice(0, None, 2)]).all()
+
+
 if __name__ == "__main__":
     test_eq()
     test_setitem()
@@ -547,6 +554,6 @@ if __name__ == "__main__":
     test_or()
     test_add()
     test_graph_traversal()
-
+    test_identity()
     print("PASS")
 

@@ -40,6 +40,48 @@ class SparseAddressor(object):
         return SparseTranspose(self, axes)
 
 
+class SparseIdentity(SparseAddressor):
+    def __init__(self, size, dtype):
+        assert size == int(size) and size > 0
+        SparseAddressor.__init__(self, [size, size], dtype)
+
+    def __getitem__(self, match):
+        match = validate_match(match, self.shape)
+        if len(match) == 2 and all(isinstance(c, int) for c in match):
+            if match[0] == match[1]:
+                return self.dtype(1)
+            else:
+                return self.dtype(0)
+        else:
+            return SparseSlice(self, match)
+
+    def filled(self, match=None):
+        one = self.dtype(1)
+
+        if match is None:
+            for i in range(self.shape[0]):
+                yield (i, i), one
+            return
+
+        match = validate_match(match, self.shape)
+        for coord in itertools.product(*affected(match, self.shape)):
+            assert len(coord) == 2
+            if coord[0] == coord[1]:
+                yield coord, one
+
+    def filled_at(self, axes):
+        if len(axes) == 1:
+            yield from range(self.shape[0])
+        elif len(axes) == 2:
+            for i in range(self.shape([0])):
+                yield (i, i)
+        else:
+            raise ValueError
+
+    def filled_count(self):
+        return self.shape[0]
+
+
 class SparseTable(SparseAddressor):
     def __init__(self, shape, dtype, table=None):
         SparseAddressor.__init__(self, shape, dtype)
@@ -63,7 +105,7 @@ class SparseTable(SparseAddressor):
 
             return self.dtype(0)
         else:
-            return SparseTableSlice(self, match)
+            return SparseSlice(self, match)
 
     def __setitem__(self, match, value):
         match = validate_match(match, self.shape)
@@ -327,7 +369,7 @@ class SparseExpansion(SparseRebase):
         SparseRebase.__init__(self, rebase, source)
 
 
-class SparseTableSlice(SparseRebase):
+class SparseSlice(SparseRebase):
     def __init__(self, source, match):
         self._match = validate_match(match, source.shape)
         rebase = transform.Slice(source.shape, self._match)
@@ -402,6 +444,11 @@ class SparseTranspose(SparseRebase):
 
 
 class SparseTensor(Tensor):
+    @staticmethod
+    def identity(size, dtype=np.int32):
+        accessor = SparseIdentity(size, dtype)
+        return SparseTensor(accessor.shape, dtype, accessor)
+
     def __init__(self, shape, dtype=np.int32, accessor=None):
         Tensor.__init__(self, shape, dtype)
         if accessor is None:
