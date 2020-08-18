@@ -408,6 +408,15 @@ class SparseTensor(Tensor):
             assert dtype == accessor.dtype
             self.accessor = accessor
 
+    def __add__(self, other):
+        if not isinstance(other, SparseTensor):
+            raise NotImplemented
+
+        this, that = broadcast(self, other)
+
+        accessor = SparseCombine(this.accessor, that.accessor, lambda l, r: l + r, this.dtype)
+        return SparseTensor(accessor.shape, accessor.dtype, accessor)
+
     def __and__(self, other):
         if not isinstance(other, SparseTensor):
             raise NotImplemented
@@ -524,6 +533,8 @@ class SparseTensor(Tensor):
         return self.accessor.filled_count()
 
     def mask(self, other):
+        other = other.broadcast(self.shape)
+
         if isinstance(other, SparseTensor):
             for coord, _ in other.filled():
                 self[coord] = self.dtype(0)
