@@ -192,10 +192,13 @@ class SparseBroadcast(SparseRebase):
         match = None if match is None else self._rebase.invert_coord(match)
 
         coords = self._map_coords(match)
-        coords = sort_coords(coords, self.shape)
+        coords = [
+            tuple(int(c) for c in coord)
+            for coord in sort_coords(coords, self.shape)
+        ]
+        assert coords == sorted(coords)
 
         for coord in coords:
-            coord = tuple(int(c) for c in coord)
             source_coord = self._rebase.invert_coord(coord)
             value = self._source[source_coord]
             assert value

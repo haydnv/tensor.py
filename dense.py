@@ -455,6 +455,10 @@ def chunk_iter(iterable, chunk_size):
         yield chunk
 
 def merge_sort(blocks):
+    if len(blocks) == 1:
+        blocks[0].sort()
+        return blocks
+
     done = True
 
     for i in range(len(blocks) - 1):
