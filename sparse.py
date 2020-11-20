@@ -26,7 +26,7 @@ class SparseAddressor(object):
     def filled_at(self, axes):
         raise NotImplementedError
 
-    def filled_count(self, match):
+    def filled_count(self, match=None):
         count = 0
         for _ in self.filled(match):
             count += 1
@@ -78,8 +78,14 @@ class SparseIdentity(SparseAddressor):
         else:
             raise ValueError
 
-    def filled_count(self):
-        return self.shape[0]
+    def filled_count(self, match=None):
+        if match is None:
+            return self.shape[0]
+        else:
+            count = 0
+            for _ in self.filled(match):
+                count += 1
+            return count
 
 
 class SparseTable(SparseAddressor):
