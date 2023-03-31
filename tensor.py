@@ -57,14 +57,28 @@ class Buffer(object):
 class Coords(object):
     @classmethod
     def from_offsets(cls, shape, offsets):
-        raise NotImplementedError
+        ndim = len(shape)
+        size = len(offsets)
+
+        offsets = Block((size, 1), offsets)
+        strides = Block((ndim,), (int(np.product(shape[i + 1:])) for i in range(ndim)))
+        coords = (offsets / strides) % Block((ndim,), shape)
+
+        return cls(shape, size, coords)
 
     def __init__(self, shape, size, coords=None):
         self.buffer = Buffer(len(shape) * size, coords)
         self.shape = shape
 
+    def __len__(self):
+        return len(self.buffer) // len(self.shape)
+
     def to_offsets(self):
-        raise NotImplementedError
+        ndim = len(self.shape)
+
+        strides = Block((ndim,), (int(np.product(self.shape[i + 1:])) for i in range(ndim)))
+        coords = Block((len(self), ndim), self.buffer)
+        return (coords * strides).reduce_sum(0)
 
 
 class Block(object):

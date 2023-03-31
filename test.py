@@ -1,6 +1,6 @@
 import unittest
 
-from tensor import Buffer, Tensor
+from tensor import Buffer, Coords, Tensor
 
 
 class BufferTests(unittest.TestCase):
@@ -8,6 +8,20 @@ class BufferTests(unittest.TestCase):
         x = Buffer(3, [1, 2, 3])
         y = Buffer(3, [4, 5, 6])
         self.assertTrue(all(x + y == Buffer(3, [5, 7, 9])))
+
+
+class CoordTests(unittest.TestCase):
+    def testOffsets(self):
+        shape = (4, 5, 5)
+        coords = [
+            0, 0, 0,
+            1, 2, 3,
+            1, 0, 2,
+            3, 1, 1,
+        ]
+
+        coords = Coords(shape, 4, coords)
+        self.assertEquals(Coords.from_offsets(shape, coords.to_offsets()), coords)
 
 
 class TensorTests(unittest.TestCase):
