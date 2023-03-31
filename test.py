@@ -16,6 +16,11 @@ class TensorTests(unittest.TestCase):
         y = Tensor((2, 3), [[5, 4, 3, 2, 1, 0]])
         self.assertTrue(all(x + y == Tensor((2, 3), [[5, 5, 5, 5, 5, 5]])))
 
+    def testMul(self):
+        x = Tensor((2, 1), [[0, 1]])
+        y = Tensor((2, 1), [[5, 4]])
+        self.assertTrue(all(x + y == Tensor((2, 1), [[0, 4]])))
+
 
 if __name__ == "__main__":
     unittest.main()
