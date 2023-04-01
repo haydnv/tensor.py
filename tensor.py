@@ -3,6 +3,8 @@ import numpy as np
 
 class Buffer(object):
     def __init__(self, size, data=None):
+        size = int(size)
+
         if data is None:
             self._data = [0] * size
         else:
@@ -42,9 +44,14 @@ class Buffer(object):
         else:
             return self._data[item]
 
+    def __repr__(self):
+        return str(list(self))
+
     def __setitem__(self, key, value):
-        value = list(value)
-        assert len(self._data[key]) == len(value)
+        if not isinstance(value, (complex, float, int)):
+            value = list(value)
+            assert len(self._data[key]) == len(value)
+
         self._data[key] = value
 
     def __iter__(self):
@@ -52,6 +59,9 @@ class Buffer(object):
 
     def __len__(self):
         return len(self._data)
+
+    def reduce_sum(self):
+        return sum(iter(self))
 
 
 class Coords(object):
@@ -85,25 +95,27 @@ class Block(object):
     def __init__(self, shape, data=None):
         size = np.product(shape)
         self.buffer = Buffer(size, data)
-        self.shape = shape
+        self.shape = tuple(shape)
 
     def __add__(self, other):
         assert self.shape == other.shape
         return Block(self.shape, self.buffer + other.buffer)
 
+    def __getitem__(self, item):
+        raise NotImplementedError(f"get item {item} from block with shape {self.shape}")
+
+    def __iter__(self):
+        return iter(self.buffer)
+
+    def __len__(self):
+        return len(self.buffer)
+
     def __matmul__(self, other):
-        assert self.shape == other.shape
-        return Block(self.shape, self.buffer * other.buffer)
+        raise NotImplementedError
 
     def __mul__(self, other):
         assert self.shape == other.shape
         return Block(self.shape, self.buffer * other.buffer)
-
-    def __getitem__(self, item):
-        raise NotImplementedError
-
-    def __len__(self):
-        return len(self.buffer)
 
     def __setitem__(self, key, value):
         raise NotImplementedError
@@ -115,6 +127,31 @@ class Block(object):
     def __truediv__(self, other):
         assert self.shape == other.shape
         return Block(self.shape, self.buffer / other.buffer)
+
+    def reduce_sum(self, axes=None):
+        if axes is None:
+            return self.buffer.reduce_sum()
+
+        axes = sorted([axes] if isinstance(axes, int) else [int(x) for x in axes])
+        shape = list(self.shape)
+        source = self.buffer
+
+        while axes:
+            axis = axes.pop()
+            dim = shape.pop(axis)
+            size = len(source) // dim
+            stride = np.product(shape[axis:])
+            length = stride * dim
+            buffer = Buffer(size)
+
+            for i in range(size):
+                x = (i // stride) * length
+                x_i = i % stride
+                buffer[i] = source[x + x_i:x + x_i + length:stride].reduce_sum()
+
+            source = buffer
+
+        return Block(shape, source)
 
     def transpose(self, permutation=None):
         if permutation is None:
@@ -142,7 +179,7 @@ class Tensor(object):
             self.blocks = [Buffer(len(block), block) for block in blocks]
             assert size == sum(len(block) for block in self.blocks)
 
-        self.shape = shape
+        self.shape = tuple(shape)
 
     def __add__(self, other):
         assert self.shape == other.shape
@@ -182,6 +219,13 @@ class Tensor(object):
         return np.product(self.shape)
 
     def __setitem__(self, key, value):
+        raise NotImplementedError
+
+    def reduce_sum(self, axes=None):
+        if axes is None:
+            return sum(block.reduce_sum() for block in self.blocks)
+
+        axes = sorted([axes] if isinstance(axes, int) else axes)
         raise NotImplementedError
 
     def transpose(self, permutation=None):

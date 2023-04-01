@@ -1,6 +1,8 @@
 import unittest
 
-from tensor import Buffer, Coords, Tensor
+import numpy as np
+
+from tensor import Block, Buffer, Coords, Tensor
 
 
 class BufferTests(unittest.TestCase):
@@ -8,6 +10,20 @@ class BufferTests(unittest.TestCase):
         x = Buffer(3, [1, 2, 3])
         y = Buffer(3, [4, 5, 6])
         self.assertTrue(all(x + y == Buffer(3, [5, 7, 9])))
+
+
+class BlockTests(unittest.TestCase):
+    def testSum(self):
+        shape = [2, 3, 4, 5, 6]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.sum(3).sum(1)
+        actual = x_tc.reduce_sum([1, 3])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
 
 class CoordTests(unittest.TestCase):
