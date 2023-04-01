@@ -13,6 +13,19 @@ class BufferTests(unittest.TestCase):
 
 
 class BlockTests(unittest.TestCase):
+    def testMul(self):
+        x_np = np.arange(12).reshape((3, 1, 4))
+        x_tc = Block((3, 1, 4), range(12))
+
+        y_np = np.arange(4).reshape(4)
+        y_tc = Block((4,), range(4))
+
+        expected = x_np * y_np
+        actual = x_tc * y_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
     def testSum(self):
         shape = [2, 3, 4, 5, 6]
 
@@ -36,8 +49,14 @@ class CoordTests(unittest.TestCase):
             3, 1, 1,
         ]
 
-        coords = Coords(shape, 4, coords)
-        self.assertEquals(Coords.from_offsets(shape, coords.to_offsets()), coords)
+        expected = Coords(shape, 4, coords)
+        print(expected)
+        offsets = expected.to_offsets()
+        print(offsets)
+        actual = Coords.from_offsets(shape, offsets)
+        print(actual)
+
+        self.assertEquals(expected, actual)
 
 
 class TensorTests(unittest.TestCase):

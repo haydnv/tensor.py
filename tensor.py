@@ -71,8 +71,8 @@ class Coords(object):
         size = len(offsets)
 
         offsets = Block((size, 1), offsets)
-        strides = Block((ndim,), (int(np.product(shape[i + 1:])) for i in range(ndim)))
-        coords = (offsets / strides) % Block((ndim,), shape)
+        strides = Block((ndim, 1), (int(np.product(shape[i + 1:])) for i in range(ndim)))
+        coords = (offsets / strides) % Block((ndim, 1), shape)
 
         return cls(shape, size, coords)
 
@@ -82,6 +82,10 @@ class Coords(object):
 
     def __len__(self):
         return len(self.buffer) // len(self.shape)
+
+    def __repr__(self):
+        ndim = len(self.shape)
+        return str([self.buffer[i:i + ndim] for i in range(0, len(self.buffer), ndim)])
 
     def to_offsets(self):
         ndim = len(self.shape)
@@ -98,8 +102,7 @@ class Block(object):
         self.shape = tuple(shape)
 
     def __add__(self, other):
-        assert self.shape == other.shape
-        return Block(self.shape, self.buffer + other.buffer)
+        return self._broadcast(other, lambda l, r: l + r)
 
     def __getitem__(self, item):
         raise NotImplementedError(f"get item {item} from block with shape {self.shape}")
@@ -113,20 +116,33 @@ class Block(object):
     def __matmul__(self, other):
         raise NotImplementedError
 
+    def __mod__(self, other):
+        return self._broadcast(other, lambda l, r: l % r)
+
     def __mul__(self, other):
-        assert self.shape == other.shape
-        return Block(self.shape, self.buffer * other.buffer)
+        return self._broadcast(other, lambda l, r: l * r)
 
     def __setitem__(self, key, value):
         raise NotImplementedError
 
+    def __repr__(self):
+        return f"(block with shape {self.shape})"
+
     def __sub__(self, other):
-        assert self.shape == other.shape
-        return Block(self.shape, self.buffer - other.buffer)
+        return self._broadcast(other, lambda l, r: l // r)
 
     def __truediv__(self, other):
-        assert self.shape == other.shape
-        return Block(self.shape, self.buffer / other.buffer)
+        return self._broadcast(other, lambda l, r: l // r)
+
+    def _broadcast(self, other, op):
+        if self.shape == other.shape:
+            shape = self.shape
+            buffer = [op(self.buffer[i], other.buffer[i]) for i in range(len(self))]
+        else:
+            shape = broadcast_into(other.shape, self.shape)
+            buffer = [op(self.buffer[i], other.buffer[i % len(other)]) for i in range(len(self))]
+
+        return Block(shape, buffer)
 
     def reduce_sum(self, axes=None):
         if axes is None:
@@ -232,5 +248,19 @@ class Tensor(object):
         raise NotImplementedError
 
 
-def broadcast(left, right):
-    raise NotImplementedError
+def broadcast_into(small, big):
+    if len(small) > len(big):
+        raise ValueError(f"cannot broadcast {small} into {big}")
+
+    shape = list(big)
+
+    offset = len(big) - len(small)
+    for x in range(len(small)):
+        if small[x] == big[x + offset]:
+            pass
+        elif small[x] == 1:
+            pass
+        else:
+            raise ValueError(f"cannot broadcast dimension {small[x]} into {big[x + offset]}")
+
+    return tuple(shape)
