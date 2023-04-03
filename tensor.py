@@ -69,9 +69,10 @@ class Block(object):
         size = np.product(shape)
         self.buffer = Buffer(size, data)
         self.shape = tuple(shape)
+        self.strides = strides_for(shape)
 
     def __add__(self, other):
-        return self._broadcast(other, lambda l, r: l + r)
+        return self._broadcast_op(other, lambda l, r: l + r)
 
     def __getitem__(self, item):
         raise NotImplementedError(f"get item {item} from block with shape {self.shape}")
@@ -86,10 +87,10 @@ class Block(object):
         raise NotImplementedError
 
     def __mod__(self, other):
-        return self._broadcast(other, lambda l, r: l % r)
+        return self._broadcast_op(other, lambda l, r: l % r)
 
     def __mul__(self, other):
-        return self._broadcast(other, lambda l, r: l * r)
+        return self._broadcast_op(other, lambda l, r: l * r)
 
     def __setitem__(self, key, value):
         raise NotImplementedError
@@ -98,20 +99,37 @@ class Block(object):
         return f"(block with shape {self.shape})"
 
     def __sub__(self, other):
-        return self._broadcast(other, lambda l, r: l // r)
+        return self._broadcast_op(other, lambda l, r: l - r)
 
     def __truediv__(self, other):
-        return self._broadcast(other, lambda l, r: l // r)
+        return self._broadcast_op(other, lambda l, r: l // r)
 
-    def _broadcast(self, other, op):
-        if self.shape == other.shape:
-            shape = self.shape
-            buffer = [op(self.buffer[i], other.buffer[i]) for i in range(len(self))]
-        else:
-            shape = broadcast_into(other.shape, self.shape)
-            buffer = [op(self.buffer[i], other.buffer[i % len(other)]) for i in range(len(self))]
+    def _broadcast_op(self, other, op):
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        buffer = [op(ln, rn) for ln, rn in zip(iter(self), iter(that))]
+        return Block(this.shape, buffer)
 
-        return Block(shape, buffer)
+    def broadcast(self, shape):
+        if shape == self.shape:
+            return self
+
+        offset = len(shape) - len(self.shape)
+
+        for (ld, rd) in zip(self.shape, shape[offset:]):
+            if ld == rd or ld == 1 or rd == 1:
+                pass
+            else:
+                raise ValueError(f"cannot broadcast dimensions {ld} and {rd}")
+
+        strides = [0] * len(shape)
+        for (x, stride) in enumerate(self.strides):
+            strides[offset + x] = stride
+
+        return BlockView(shape, self, strides)
+
+    def get_offset(self, i):
+        return self.buffer[i]
 
     def reduce_sum(self, axes=None):
         if axes is None:
@@ -127,7 +145,7 @@ class Block(object):
             size = len(source) // dim
             stride = int(np.product(shape[axis:]))
             length = stride * dim
-            buffer = Buffer(size)
+            buffer = Buffer(size)  # TODO: is there a way to avoid this allocation?
 
             for i in range(size):
                 x = (i // stride) * length
@@ -139,17 +157,41 @@ class Block(object):
         return Block(shape, source)
 
     def transpose(self, permutation=None):
+        ndim = len(self.shape)
+
         if permutation is None:
-            permutation = list(reversed(range(len(self.shape))))
+            permutation = list(reversed(range(ndim)))
 
-        assert len(permutation) == len(self.shape)
+        assert len(permutation) == ndim
+        assert all(0 <= x < ndim for x in permutation)
+        assert all(x in permutation for x in range(ndim))
 
-        buffer = Buffer(len(self), self.buffer)
-        for i, x in enumerate(permutation):
-            if i == x:
-                pass  # nothing to do
-            else:
-                raise NotImplementedError
+        shape = tuple(self.shape[x] for x in permutation)
+        strides = [self.strides[x] for x in permutation]
+        return BlockView(shape, self, strides)
+
+
+class BlockView(Block):
+    def __init__(self, shape, source, strides):
+        self.shape = shape
+        self.source = source
+        self.source_strides = strides
+        self.strides = strides_for(shape)
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self.get_offset(i)
+
+    def __len__(self):
+        return int(np.product(self.shape))
+
+    def get_offset(self, i):
+        coord = ((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
+        i = sum(i * stride for i, stride in zip(coord, self.source_strides))
+        return self.source.get_offset(i)
+
+    def reduce_sum(self, axes=None):
+        raise NotImplementedError
 
 
 class Tensor(object):
@@ -217,19 +259,25 @@ class Tensor(object):
         raise NotImplementedError
 
 
-def broadcast_into(small, big):
-    if len(small) > len(big):
-        raise ValueError(f"cannot broadcast {small} into {big}")
+def broadcast(left, right):
+    if len(left.shape) < len(right.shape):
+        right, left = broadcast(right, left)
+        return left, right
 
-    shape = list(big)
-
-    offset = len(big) - len(small)
-    for x in range(len(small)):
-        if small[x] == big[x + offset]:
+    shape = left.shape
+    offset = len(shape) - len(right.shape)
+    for x in range(len(right.shape)):
+        if shape[offset + x] == right.shape[x]:
             pass
-        elif small[x] == 1:
+        elif right.shape[x] == 1:
             pass
+        elif shape[offset + x] == 1:
+            shape[offset + x] = right.shape[x]
         else:
-            raise ValueError(f"cannot broadcast dimension {small[x]} into {big[x + offset]}")
+            raise ValueError(f"cannot broadcast dimensions {shape[offset + x]} and {right.shape[x]}")
 
-    return tuple(shape)
+    return left.broadcast(shape), right.broadcast(shape)
+
+
+def strides_for(shape):
+    return [int(np.product(shape[x + 1:])) for x in range(len(shape))]
