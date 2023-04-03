@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from tensor import Block, Buffer, Coords, Tensor
+from tensor import Block, Buffer, Tensor
 
 
 class BufferTests(unittest.TestCase):
@@ -37,26 +37,6 @@ class BlockTests(unittest.TestCase):
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
-
-
-class CoordTests(unittest.TestCase):
-    def testOffsets(self):
-        shape = (4, 5, 5)
-        coords = [
-            0, 0, 0,
-            1, 2, 3,
-            1, 0, 2,
-            3, 1, 1,
-        ]
-
-        expected = Coords(shape, 4, coords)
-        print(expected)
-        offsets = expected.to_offsets()
-        print(offsets)
-        actual = Coords.from_offsets(shape, offsets)
-        print(actual)
-
-        self.assertEquals(expected, actual)
 
 
 class TensorTests(unittest.TestCase):

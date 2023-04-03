@@ -64,37 +64,6 @@ class Buffer(object):
         return sum(iter(self))
 
 
-class Coords(object):
-    @classmethod
-    def from_offsets(cls, shape, offsets):
-        ndim = len(shape)
-        size = len(offsets)
-
-        offsets = Block((size, 1), offsets)
-        strides = Block((ndim, 1), (int(np.product(shape[i + 1:])) for i in range(ndim)))
-        coords = (offsets / strides) % Block((ndim, 1), shape)
-
-        return cls(shape, size, coords)
-
-    def __init__(self, shape, size, coords=None):
-        self.buffer = Buffer(len(shape) * size, coords)
-        self.shape = shape
-
-    def __len__(self):
-        return len(self.buffer) // len(self.shape)
-
-    def __repr__(self):
-        ndim = len(self.shape)
-        return str([self.buffer[i:i + ndim] for i in range(0, len(self.buffer), ndim)])
-
-    def to_offsets(self):
-        ndim = len(self.shape)
-
-        strides = Block((ndim,), (int(np.product(self.shape[i + 1:])) for i in range(ndim)))
-        coords = Block((len(self), ndim), self.buffer)
-        return (coords * strides).reduce_sum(0)
-
-
 class Block(object):
     def __init__(self, shape, data=None):
         size = np.product(shape)
@@ -156,7 +125,7 @@ class Block(object):
             axis = axes.pop()
             dim = shape.pop(axis)
             size = len(source) // dim
-            stride = np.product(shape[axis:])
+            stride = int(np.product(shape[axis:]))
             length = stride * dim
             buffer = Buffer(size)
 
