@@ -26,6 +26,18 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(expected.shape, actual.shape)
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
+    def testSlice(self):
+        shape = [2, 3, 4, 5, 6]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np[1, :, 1:, :-2]
+        actual = x_tc[1, :, 1:, :-2]
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
     def testSum(self):
         shape = [2, 3, 4, 5, 6]
 

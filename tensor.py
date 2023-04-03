@@ -75,7 +75,45 @@ class Block(object):
         return self._broadcast_op(other, lambda l, r: l + r)
 
     def __getitem__(self, item):
-        raise NotImplementedError(f"get item {item} from block with shape {self.shape}")
+        if not isinstance(item, tuple):
+            item = tuple(item)
+
+        ndim = len(self.shape)
+
+        if len(item) == ndim and all(isinstance(item[x], int) for x in range(ndim)):
+            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
+            offset = sum(i * stride for i, stride in zip(coord, self.strides))
+            return self.get_offset(offset)
+
+        bounds = []
+        shape = []
+
+        for x, bound in enumerate(item):
+            dim = self.shape[x]
+
+            if isinstance(bound, slice):
+                start = 0 if bound.start is None else bound.start if bound.start > 0 else dim + bound.start
+                stop = dim if bound.stop is None else bound.stop if bound.stop > 0 else dim + bound.stop
+                step = 1 if bound.step is None else bound.step
+
+                assert 0 <= start <= dim
+                assert 0 <= stop <= dim
+                assert 0 < step <= dim
+
+                bounds.append(slice(start, stop, step))
+                shape.append((stop - start) // step)
+            elif isinstance(bound, int):
+                i = bound if bound > 0 else dim + bound
+                assert 0 <= i <= dim
+                bounds.append(i)
+            else:
+                raise ValueError(f"invalid bound {bound} for ais {x}")
+
+        for dim in self.shape[len(item):]:
+            bounds.append(slice(0, dim, 1))
+            shape.append(dim)
+
+        return BlockSlice(self, shape, bounds)
 
     def __iter__(self):
         return iter(self.buffer)
@@ -107,7 +145,7 @@ class Block(object):
     def _broadcast_op(self, other, op):
         this, that = broadcast(self, other)
         assert this.shape == that.shape
-        buffer = [op(ln, rn) for ln, rn in zip(iter(self), iter(that))]
+        buffer = [op(ln, rn) for ln, rn in zip(this, that)]  # TODO: is there a way to avoid this allocation?
         return Block(this.shape, buffer)
 
     def broadcast(self, shape):
@@ -126,7 +164,7 @@ class Block(object):
         for (x, stride) in enumerate(self.strides):
             strides[offset + x] = stride
 
-        return BlockView(shape, self, strides)
+        return BlockView(self, shape, strides)
 
     def get_offset(self, i):
         return self.buffer[i]
@@ -168,13 +206,50 @@ class Block(object):
 
         shape = tuple(self.shape[x] for x in permutation)
         strides = [self.strides[x] for x in permutation]
-        return BlockView(shape, self, strides)
+        return BlockView(self, shape, strides)
+
+
+class BlockSlice(Block):
+    def __init__(self, source, shape, bounds):
+        self.bounds = bounds
+        self.shape = tuple(shape)
+        self.source = source
+        self.strides = strides_for(shape)
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self.get_offset(i)
+
+    def __len__(self):
+        return np.product(self.shape)
+
+    def __setitem__(self, key, value):
+        raise NotImplementedError("cannot write to a BlockSlice")
+
+    def get_offset(self, i):
+        assert i < len(self)
+
+        coord = tuple((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
+
+        x = 0
+        source_coord = []
+        for bound in self.bounds:
+            if isinstance(bound, int):
+                source_coord.append(bound)
+            else:
+                source_coord.append(bound.start + (coord[x] * bound.step))
+                x += 1
+
+        return self.source[source_coord]
+
+    def reduce_sum(self, axes=None):
+        raise NotImplementedError
 
 
 class BlockView(Block):
-    def __init__(self, shape, source, strides):
-        self.shape = shape
+    def __init__(self, source, shape, strides):
         self.source = source
+        self.shape = tuple(shape)
         self.source_strides = strides
         self.strides = strides_for(shape)
 
@@ -185,7 +260,11 @@ class BlockView(Block):
     def __len__(self):
         return int(np.product(self.shape))
 
+    def __setitem__(self, key, value):
+        raise NotImplementedError("cannot write to a BlockView")
+
     def get_offset(self, i):
+        assert i < len(self)
         coord = ((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
         i = sum(i * stride for i, stride in zip(coord, self.source_strides))
         return self.source.get_offset(i)
