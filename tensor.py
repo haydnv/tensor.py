@@ -76,13 +76,11 @@ class Block(object):
 
     def __getitem__(self, item):
         item = tuple(item)
-
         ndim = len(self.shape)
 
-        if len(item) == ndim and all(isinstance(item[x], int) for x in range(ndim)):
+        if len(item) == ndim and all(isinstance(i, int) for i in item):
             coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
             offset = sum(i * stride for i, stride in zip(coord, self.strides))
-            assert offset < len(self)
             return self.get_offset(offset)
 
         bounds = []
@@ -122,7 +120,42 @@ class Block(object):
         return len(self.buffer)
 
     def __matmul__(self, other):
-        raise NotImplementedError
+        ndim = len(self.shape)
+
+        assert ndim >= 2
+        assert len(other.shape) == ndim
+        assert self.shape[:-2] == other.shape[:-2]
+
+        x, y = self.shape[-2:]
+        assert other.shape[-2] == y
+        z = other.shape[-1]
+
+        matrix_size = x * z
+        num_matrices = len(self) // (x * y)
+        assert num_matrices == len(other) // (y * z)
+
+        buffer = Buffer(num_matrices * matrix_size)
+        for m in range(num_matrices):
+            offset = m * x * z
+
+            for o in range(matrix_size):
+                i = o // z
+                k = o % z
+                buffer[offset + o] = sum(self.get_offset((m * x * y) + (i * x) + (i % x) + j) * other.get_offset((m * y * z) + (j * z) + k) for j in range(y))
+
+        return Block(list(self.shape[:-2]) + [x, z], buffer)
+
+        if ndim == 2:
+            shape = (x, z)
+            result = Block(shape)
+            for i in range(x):
+                for j in range(y):
+                    for k in range(z):
+                        result[i, j] = self[i, j] * other[j, k]
+
+            return result
+        else:
+            raise NotImplementedError
 
     def __mod__(self, other):
         return self._broadcast_op(other, lambda l, r: l % r)
@@ -131,6 +164,15 @@ class Block(object):
         return self._broadcast_op(other, lambda l, r: l * r)
 
     def __setitem__(self, key, value):
+        key = tuple(key)
+        ndim = len(self.shape)
+
+        if len(key) == ndim and all(isinstance(i, int) for i in key):
+            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(key)]
+            offset = sum(i * stride for i, stride in zip(coord, self.strides))
+            self.buffer[offset] = value
+            return
+
         raise NotImplementedError
 
     def __repr__(self):

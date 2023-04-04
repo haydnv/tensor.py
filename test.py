@@ -13,6 +13,30 @@ class BufferTests(unittest.TestCase):
 
 
 class BlockTests(unittest.TestCase):
+    def testMatMul(self):
+        a_np = np.arange(6).reshape((2, 3))
+        a_tc = Block((2, 3), range(6))
+        b_np = np.arange(12).reshape((3, 4))
+        b_tc = Block((3, 4), range(12))
+
+        expected = a_np @ b_np
+        actual = a_tc @ b_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testMatMulBatch(self):
+        a_np = np.arange(18).reshape((3, 2, 3))
+        a_tc = Block((3, 2, 3), range(18))
+        b_np = np.arange(36).reshape((3, 3, 4))
+        b_tc = Block((3, 3, 4), range(36))
+
+        expected = a_np @ b_np
+        actual = a_tc @ b_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
     def testMul(self):
         x_np = np.arange(12).reshape((3, 1, 4))
         x_tc = Block((3, 1, 4), range(12))
