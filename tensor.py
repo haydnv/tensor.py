@@ -75,14 +75,14 @@ class Block(object):
         return self._broadcast_op(other, lambda l, r: l + r)
 
     def __getitem__(self, item):
-        if not isinstance(item, tuple):
-            item = tuple(item)
+        item = tuple(item)
 
         ndim = len(self.shape)
 
         if len(item) == ndim and all(isinstance(item[x], int) for x in range(ndim)):
             coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
             offset = sum(i * stride for i, stride in zip(coord, self.strides))
+            assert offset < len(self)
             return self.get_offset(offset)
 
         bounds = []
@@ -103,7 +103,7 @@ class Block(object):
                 bounds.append(slice(start, stop, step))
                 shape.append((stop - start) // step)
             elif isinstance(bound, int):
-                i = bound if bound > 0 else dim + bound
+                i = bound if bound >= 0 else dim + bound
                 assert 0 <= i <= dim
                 bounds.append(i)
             else:
@@ -171,28 +171,22 @@ class Block(object):
 
     def reduce_sum(self, axes=None):
         if axes is None:
-            return self.buffer.reduce_sum()
+            return sum(self)
 
         axes = sorted([axes] if isinstance(axes, int) else [int(x) for x in axes])
-        shape = list(self.shape)
-        source = self.buffer
+        shape = [dim for x, dim in enumerate(self.shape) if x not in axes]
+        strides = strides_for(shape)
 
-        while axes:
-            axis = axes.pop()
-            dim = shape.pop(axis)
-            size = len(source) // dim
-            stride = int(np.product(shape[axis:]))
-            length = stride * dim
-            buffer = Buffer(size)  # TODO: is there a way to avoid this allocation?
+        buffer = Buffer(np.product(shape))
 
-            for i in range(size):
-                x = (i // stride) * length
-                x_i = i % stride
-                buffer[i] = source[x + x_i:x + x_i + length:stride].reduce_sum()
+        for i in range(len(buffer)):
+            coord = [(i // stride) % dim for dim, stride in zip(shape, strides)]
+            for x in axes:
+                coord.insert(x, slice(None))
 
-            source = buffer
+            buffer[i] = sum(self[coord])
 
-        return Block(shape, source)
+        return Block(shape, buffer)
 
     def transpose(self, permutation=None):
         ndim = len(self.shape)
@@ -242,9 +236,6 @@ class BlockSlice(Block):
 
         return self.source[source_coord]
 
-    def reduce_sum(self, axes=None):
-        raise NotImplementedError
-
 
 class BlockView(Block):
     def __init__(self, source, shape, strides):
@@ -268,9 +259,6 @@ class BlockView(Block):
         coord = ((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
         i = sum(i * stride for i, stride in zip(coord, self.source_strides))
         return self.source.get_offset(i)
-
-    def reduce_sum(self, axes=None):
-        raise NotImplementedError
 
 
 class Tensor(object):
