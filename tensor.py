@@ -1,6 +1,9 @@
 import numpy as np
 
 
+IDEAL_BLOCK_SIZE = 24
+
+
 class Buffer(object):
     def __init__(self, size, data=None):
         size = int(size)
@@ -304,57 +307,101 @@ class BlockView(Block):
 
 
 class Tensor(object):
-    def __init__(self, shape, blocks=None):
-        assert all(isinstance(dim, int) and dim > 0 for dim in shape)
+    def __init__(self, shape, data=None):
+        assert all(isinstance(dim, int) and dim > 0 for dim in shape), f"invalid shape: {shape}"
 
         size = np.product(shape)
+        assert size
 
-        if blocks is None:
+        if size < (2 * IDEAL_BLOCK_SIZE):
+            num_blocks = 1
+        elif len(shape) == 1 and size % IDEAL_BLOCK_SIZE == 0:
+            num_blocks = size // IDEAL_BLOCK_SIZE
+        elif len(shape) == 1 or shape[-2] * shape[-1] > (IDEAL_BLOCK_SIZE * 2):
+            num_blocks = (size // IDEAL_BLOCK_SIZE)
+            num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
+        else:
+            num_blocks = IDEAL_BLOCK_SIZE // (shape[-2] * shape[-1])
+            num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
+
+        if num_blocks == 1:
             self.blocks = [Buffer(size)]
         else:
-            self.blocks = [Buffer(len(block), block) for block in blocks]
-            assert size == sum(len(block) for block in self.blocks)
+            self.blocks = [Buffer(size // num_blocks) for _ in range(num_blocks - 1)]
+            if size % num_blocks:
+                self.blocks.append(Buffer(size % (size // num_blocks)))
+
+        assert self.blocks
+
+        block_size = len(self.blocks[0])
+
+        if data is not None:
+            for offset, n in enumerate(data):
+                assert isinstance(n, (complex, float, int)), f"not a number: {n}"
+                self.blocks[offset // block_size][offset % block_size] = n
+
+            if offset < size - 1:
+                raise ValueError(f"only {offset} elements were provided for a Tensor of size {size}")
+
+        assert size == sum(len(block) for block in self.blocks)
+        assert all(len(block) == block_size for block in self.blocks[:-1])
+        assert len(self.blocks[-1]) <= block_size
 
         self.shape = tuple(shape)
+        self.strides = strides_for(self.shape)
 
     def __add__(self, other):
-        assert self.shape == other.shape
-        assert len(self.blocks) == len(other.blocks)
-        return Tensor(self.shape, (lb + rb for lb, rb in zip(self, other)))
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb + rb for lb, rb in zip(this, that)))
 
     def __matmul__(self, other):
         raise NotImplementedError
 
     def __mul__(self, other):
-        assert self.shape == other.shape
-        assert len(self.blocks) == len(other.blocks)
-        return Tensor(self.shape, (lb * rb for lb, rb in zip(self, other)))
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb * rb for lb, rb in zip(this, that)))
 
     def __eq__(self, other):
-        assert self.shape == other.shape
-        assert len(self.blocks) == len(other.blocks)
-        return Tensor(self.shape, (lb == rb for lb, rb in zip(self, other)))
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb == rb for lb, rb in zip(this, that)))
 
     def __sub__(self, other):
-        assert self.shape == other.shape
-        assert len(self.blocks) == len(other.blocks)
-        return Tensor(self.shape, (lb - rb for lb, rb in zip(self, other)))
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb - rb for lb, rb in zip(this, that)))
 
     def __truediv__(self, other):
-        assert self.shape == other.shape
-        assert len(self.blocks) == len(other.blocks)
-        return Tensor(self.shape, (lb - rb for lb, rb in zip(self, other)))
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb / rb for lb, rb in zip(this, that)))
 
     def __getitem__(self, item):
         raise NotImplementedError
 
     def __iter__(self):
-        return iter(self.blocks)
+        for block in self.blocks:
+            for n in block:
+                yield n
 
     def __len__(self):
         return np.product(self.shape)
 
     def __setitem__(self, key, value):
+        raise NotImplementedError
+
+    def broadcast(self, shape):
+        if self.shape == shape:
+            return self
+
+        for dim, bdim in zip(self.shape, shape[-len(self.shape):]):
+            if dim == bdim or dim == 1 or bdim == 1:
+                pass
+            else:
+                raise ValueError(f"cannot broadcast dimension {dim} into {bdim}")
+
         raise NotImplementedError
 
     def reduce_sum(self, axes=None):

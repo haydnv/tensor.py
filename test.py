@@ -77,14 +77,27 @@ class BlockTests(unittest.TestCase):
 
 class TensorTests(unittest.TestCase):
     def testAdd(self):
-        x = Tensor((2, 3), [[0, 1, 2, 3, 4, 5]])
-        y = Tensor((2, 3), [[5, 4, 3, 2, 1, 0]])
-        self.assertTrue(all(x + y == Tensor((2, 3), [[5, 5, 5, 5, 5, 5]])))
+        shape = (1, 3, 5, 9)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+        y_np = np.array([n for n in reversed(range(size))]).reshape(shape)
+        y_tc = Tensor(shape, reversed(range(size)))
+
+        expected = x_np + y_np
+        actual = x_tc + y_tc
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
     def testMul(self):
-        x = Tensor((2, 1), [[0, 1]])
-        y = Tensor((2, 1), [[5, 4]])
-        self.assertTrue(all(x + y == Tensor((2, 1), [[0, 4]])))
+        x = Tensor((2, 1), [0, 1])
+        y = Tensor((2, 1), [5, 4])
+
+        expected = Tensor((2, 1), [0, 4])
+        actual = x * y
+
+        self.assertTrue(all(expected == actual))
 
 
 if __name__ == "__main__":
