@@ -69,9 +69,11 @@ class Buffer(object):
 
 class Block(object):
     def __init__(self, shape, data=None):
+        assert shape
+
         size = np.product(shape)
         self.buffer = Buffer(size, data)
-        self.shape = tuple(shape)
+        self.shape = tuple(int(dim) for dim in shape)
         self.strides = strides_for(shape)
 
     def __add__(self, other):
@@ -80,6 +82,8 @@ class Block(object):
     def __getitem__(self, item):
         item = tuple(item)
         ndim = len(self.shape)
+
+        assert not any(isinstance(i, np.int64) for i in item)
 
         if len(item) == ndim and all(isinstance(i, int) for i in item):
             coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
@@ -167,13 +171,15 @@ class Block(object):
         return Block(this.shape, buffer)
 
     def broadcast(self, shape):
+        assert shape
+
         if shape == self.shape:
             return self
 
         offset = len(shape) - len(self.shape)
 
         for (ld, rd) in zip(self.shape, shape[offset:]):
-            if ld == rd or ld == 1 or rd == 1:
+            if ld == rd or ld == 1:
                 pass
             else:
                 raise ValueError(f"cannot broadcast dimensions {ld} and {rd}")
@@ -185,6 +191,7 @@ class Block(object):
         return BlockView(self, shape, strides)
 
     def get_offset(self, i):
+        assert i < np.product(self.shape), f"offset {i} is out of bounds for a Block with shape {self.shape}"
         return self.buffer[i]
 
     def reduce_sum(self, axes=None):
@@ -215,8 +222,10 @@ class Block(object):
 
 class BlockSlice(Block):
     def __init__(self, source, shape, bounds):
+        assert shape
+
         self.bounds = bounds
-        self.shape = tuple(shape)
+        self.shape = tuple(int(dim) for dim in shape)
         self.source = source
         self.strides = strides_for(shape)
 
@@ -249,8 +258,10 @@ class BlockSlice(Block):
 
 class BlockView(Block):
     def __init__(self, source, shape, strides):
+        assert shape
+
         self.source = source
-        self.shape = tuple(shape)
+        self.shape = tuple(int(dim) for dim in shape)
         self.source_strides = strides
         self.strides = strides_for(shape)
 
@@ -266,7 +277,7 @@ class BlockView(Block):
 
     def get_offset(self, i):
         assert i < len(self)
-        coord = ((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
+        coord = [(i // stride) % dim if stride else 0 for dim, stride in zip(self.shape, self.strides)]
         i = sum(i * stride for i, stride in zip(coord, self.source_strides))
         return self.source.get_offset(i)
 
@@ -328,9 +339,9 @@ class Tensor(object):
         assert all(len(block) == block_size for block in self.blocks[:-1])
         assert len(self.blocks[-1]) <= block_size
 
-        map_shape = shape[:block_axis] + [np.product(shape[block_axis:]) // block_size]
+        map_shape = shape[:block_axis] + [int(np.product(shape[block_axis:]) // block_size)]
         self.block_map = Block(map_shape, range(len(self.blocks)))
-        self.shape = tuple(shape)
+        self.shape = tuple(int(dim) for dim in shape)
 
     def __add__(self, other):
         this, that = broadcast(self, other)
@@ -387,15 +398,26 @@ class Tensor(object):
     def broadcast(self, shape):
         if self.shape == shape:
             return self
-        else:
-            block_axis = len(self.block_map.shape)
-            block_map = self.block_map.broadcast(shape[:block_axis])
-            block_shape = self.shape[block_axis:]
-            blocks = [self.get_block(i).broadcast(block_shape) for i in self.block_map]
-            return TensorView(blocks, block_map, shape)
+
+        # characterize the source tensor (this tensor)
+        block_size = len(self) // len(self.block_map)
+        block_axis = 0
+        while np.product(shape[block_axis:]) < block_size:
+            block_axis += 1
+
+        # characterize the output tensor (the broadcasted view of this tensor)
+        shape = list(shape)
+        offset = len(shape) - len(self.shape)
+        block_shape = shape[offset + block_axis:]
+        map_shape = shape[:offset + block_axis]
+
+        block_map = self.block_map.broadcast(map_shape) if map_shape else self.block_map
+        blocks = [self.get_block(i).broadcast(block_shape) for i in block_map]
+
+        return TensorView(blocks, block_map, shape)
 
     def get_block(self, i):
-        return self.blocks[i]
+        return self.blocks[int(i)]
 
     def reduce_sum(self, axes=None):
         if axes is None:
@@ -419,9 +441,12 @@ class Tensor(object):
 
 
 class TensorSlice(Tensor):
-    def __init__(self, source, shape):
+    def __init__(self, source, shape, bounds):
+        self.bounds = bounds
         self.shape = shape
         self.source = source
+
+        self.block_map = "TODO"
 
     def get_block(self, i):
         raise NotImplementedError
@@ -431,11 +456,12 @@ class TensorView(Tensor):
     def __init__(self, blocks, block_map, shape):
         self.blocks = blocks
         self.block_map = block_map
-        self.shape = shape
+        self.shape = tuple(int(dim) for dim in shape)
 
     def get_block(self, i):
+        i = int(i)
         strides = strides_for(self.block_map.shape)
-        coord = [(i // stride) + (i % dim) for stride, dim in zip(strides, self.block_map.shape)]
+        coord = [(i // stride) + (i % dim) if stride else i % dim for stride, dim in zip(strides, self.block_map.shape)]
         i = self.block_map[coord]
         return self.blocks[i]
 
@@ -498,7 +524,7 @@ def slice_bounds(source_shape, key):
             assert 0 <= i <= dim
             bounds.append(i)
         else:
-            raise ValueError(f"invalid bound {bound} for ais {x}")
+            raise ValueError(f"invalid bound {bound} (type {type(bound)}) for axis {x}")
 
     for dim in source_shape[len(key):]:
         bounds.append(slice(0, dim, 1))
@@ -508,4 +534,4 @@ def slice_bounds(source_shape, key):
 
 
 def strides_for(shape):
-    return [int(np.product(shape[x + 1:])) for x in range(len(shape))]
+    return [0 if dim == 1 else int(np.product(shape[x + 1:])) for x, dim in enumerate(shape)]
