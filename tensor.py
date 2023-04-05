@@ -12,7 +12,7 @@ class Buffer(object):
             self._data = [0] * size
         else:
             self._data = list(data)
-            assert size == len(self._data)
+            assert size == len(self._data), f"{len(self._data)} elements were provided for a buffer of size {size}"
             assert all(isinstance(n, (complex, float, int)) for n in self._data)
 
     def __add__(self, other):
@@ -86,34 +86,7 @@ class Block(object):
             offset = sum(i * stride for i, stride in zip(coord, self.strides))
             return self.get_offset(offset)
 
-        bounds = []
-        shape = []
-
-        for x, bound in enumerate(item):
-            dim = self.shape[x]
-
-            if isinstance(bound, slice):
-                start = 0 if bound.start is None else bound.start if bound.start > 0 else dim + bound.start
-                stop = dim if bound.stop is None else bound.stop if bound.stop > 0 else dim + bound.stop
-                step = 1 if bound.step is None else bound.step
-
-                assert 0 <= start <= dim
-                assert 0 <= stop <= dim
-                assert 0 < step <= dim
-
-                bounds.append(slice(start, stop, step))
-                shape.append((stop - start) // step)
-            elif isinstance(bound, int):
-                i = bound if bound >= 0 else dim + bound
-                assert 0 <= i <= dim
-                bounds.append(i)
-            else:
-                raise ValueError(f"invalid bound {bound} for ais {x}")
-
-        for dim in self.shape[len(item):]:
-            bounds.append(slice(0, dim, 1))
-            shape.append(dim)
-
+        bounds, shape = slice_bounds(self.shape, item)
         return BlockSlice(self, shape, bounds)
 
     def __iter__(self):
@@ -234,15 +207,7 @@ class Block(object):
         return Block(shape, buffer)
 
     def transpose(self, permutation=None):
-        ndim = len(self.shape)
-
-        if permutation is None:
-            permutation = list(reversed(range(ndim)))
-
-        assert len(permutation) == ndim
-        assert all(0 <= x < ndim for x in permutation)
-        assert all(x in permutation for x in range(ndim))
-
+        permutation = check_permutation(self.shape, permutation)
         shape = tuple(self.shape[x] for x in permutation)
         strides = [self.strides[x] for x in permutation]
         return BlockView(self, shape, strides)
@@ -310,6 +275,7 @@ class Tensor(object):
     def __init__(self, shape, data=None):
         assert all(isinstance(dim, int) and dim > 0 for dim in shape), f"invalid shape: {shape}"
 
+        shape = list(shape)
         size = np.product(shape)
         assert size
 
@@ -324,31 +290,47 @@ class Tensor(object):
             num_blocks = IDEAL_BLOCK_SIZE // (shape[-2] * shape[-1])
             num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
 
+        block_size = size // num_blocks
+
+        block_axis = 0
+        while np.product(shape[block_axis:]) < block_size:
+            block_axis += 1
+
         if num_blocks == 1:
-            self.blocks = [Buffer(size)]
+            buffers = [Buffer(block_size)]
         else:
-            self.blocks = [Buffer(size // num_blocks) for _ in range(num_blocks - 1)]
+            buffers = [Buffer(block_size) for _ in range(num_blocks - 1)]
+
             if size % num_blocks:
-                self.blocks.append(Buffer(size % (size // num_blocks)))
+                buffers.append(Buffer(size % block_size))
 
-        assert self.blocks
-
-        block_size = len(self.blocks[0])
+        block_shape = shape[block_axis:]
 
         if data is not None:
             for offset, n in enumerate(data):
                 assert isinstance(n, (complex, float, int)), f"not a number: {n}"
-                self.blocks[offset // block_size][offset % block_size] = n
+                buffers[offset // block_size][offset % block_size] = n
 
-            if offset < size - 1:
-                raise ValueError(f"only {offset} elements were provided for a Tensor of size {size}")
+            if offset + 1 != size:
+                raise ValueError(f"{offset + 1} elements were provided for a Tensor of size {size}")
 
+        if size % block_size:
+            last_block_shape = block_shape
+            last_block_shape[0] = int(block_shape[0] // np.product(block_shape[1:]))
+
+            self.blocks = [Block(block_shape, buffer) for buffer in buffers[:-1]]
+            self.blocks.append(Block(last_block_shape, buffers[-1]))
+        else:
+            self.blocks = [Block(block_shape, buffer) for buffer in buffers]
+
+        assert self.blocks
         assert size == sum(len(block) for block in self.blocks)
         assert all(len(block) == block_size for block in self.blocks[:-1])
         assert len(self.blocks[-1]) <= block_size
 
+        map_shape = shape[:block_axis] + [np.product(shape[block_axis:]) // block_size]
+        self.block_map = Block(map_shape, range(len(self.blocks)))
         self.shape = tuple(shape)
-        self.strides = strides_for(self.shape)
 
     def __add__(self, other):
         this, that = broadcast(self, other)
@@ -379,11 +361,21 @@ class Tensor(object):
         return Tensor(this.shape, (lb / rb for lb, rb in zip(this, that)))
 
     def __getitem__(self, item):
-        raise NotImplementedError
+        item = tuple(item)
+        ndim = len(self.shape)
+        block_size = len(self.blocks[0])
+
+        if len(item) == ndim and all(isinstance(i, int) for i in item):
+            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
+            offset = sum(i * stride for i, stride in zip(coord, strides_for(self.shape)))
+            return self.blocks[offset // block_size][offset % block_size]
+
+        bounds, shape = slice_bounds(self.shape, item)
+        return TensorSlice(self, shape, bounds)
 
     def __iter__(self):
-        for block in self.blocks:
-            for n in block:
+        for i in self.block_map:
+            for n in self.get_block(i):
                 yield n
 
     def __len__(self):
@@ -395,14 +387,15 @@ class Tensor(object):
     def broadcast(self, shape):
         if self.shape == shape:
             return self
+        else:
+            block_axis = len(self.block_map.shape)
+            block_map = self.block_map.broadcast(shape[:block_axis])
+            block_shape = self.shape[block_axis:]
+            blocks = [self.get_block(i).broadcast(block_shape) for i in self.block_map]
+            return TensorView(blocks, block_map, shape)
 
-        for dim, bdim in zip(self.shape, shape[-len(self.shape):]):
-            if dim == bdim or dim == 1 or bdim == 1:
-                pass
-            else:
-                raise ValueError(f"cannot broadcast dimension {dim} into {bdim}")
-
-        raise NotImplementedError
+    def get_block(self, i):
+        return self.blocks[i]
 
     def reduce_sum(self, axes=None):
         if axes is None:
@@ -411,8 +404,40 @@ class Tensor(object):
         axes = sorted([axes] if isinstance(axes, int) else axes)
         raise NotImplementedError
 
+    def reshape(self, shape):
+        if shape == self.shape:
+            return self
+        elif np.product(shape) == np.product(self.shape):
+            return Tensor(shape, self)
+        else:
+            raise ValueError(f"cannot reshape from {self.shape} into {shape}")
+
     def transpose(self, permutation=None):
+        permutation = check_permutation(self.shape, permutation)
+        shape = tuple(self.shape[x] for x in permutation)
+        raise NotImplementedError("Tensor.transpose")
+
+
+class TensorSlice(Tensor):
+    def __init__(self, source, shape):
+        self.shape = shape
+        self.source = source
+
+    def get_block(self, i):
         raise NotImplementedError
+
+
+class TensorView(Tensor):
+    def __init__(self, blocks, block_map, shape):
+        self.blocks = blocks
+        self.block_map = block_map
+        self.shape = shape
+
+    def get_block(self, i):
+        strides = strides_for(self.block_map.shape)
+        coord = [(i // stride) + (i % dim) for stride, dim in zip(strides, self.block_map.shape)]
+        i = self.block_map[coord]
+        return self.blocks[i]
 
 
 def broadcast(left, right):
@@ -420,7 +445,7 @@ def broadcast(left, right):
         right, left = broadcast(right, left)
         return left, right
 
-    shape = left.shape
+    shape = list(left.shape)
     offset = len(shape) - len(right.shape)
     for x in range(len(right.shape)):
         if shape[offset + x] == right.shape[x]:
@@ -433,6 +458,53 @@ def broadcast(left, right):
             raise ValueError(f"cannot broadcast dimensions {shape[offset + x]} and {right.shape[x]}")
 
     return left.broadcast(shape), right.broadcast(shape)
+
+
+def check_permutation(shape, permutation):
+    ndim = len(shape)
+
+    if permutation is None:
+        permutation = list(reversed(range(ndim)))
+    else:
+        permutation = [ndim + x if x < 0 else x for x in permutation]
+
+    assert len(permutation) == ndim
+    assert all(0 <= x < ndim for x in permutation)
+    assert all(x in permutation for x in range(ndim))
+
+    return permutation
+
+
+def slice_bounds(source_shape, key):
+    bounds = []
+    shape = []
+
+    for x, bound in enumerate(key):
+        dim = source_shape[x]
+
+        if isinstance(bound, slice):
+            start = 0 if bound.start is None else bound.start if bound.start > 0 else dim + bound.start
+            stop = dim if bound.stop is None else bound.stop if bound.stop > 0 else dim + bound.stop
+            step = 1 if bound.step is None else bound.step
+
+            assert 0 <= start <= dim
+            assert 0 <= stop <= dim
+            assert 0 < step <= dim
+
+            bounds.append(slice(start, stop, step))
+            shape.append((stop - start) // step)
+        elif isinstance(bound, int):
+            i = bound if bound >= 0 else dim + bound
+            assert 0 <= i <= dim
+            bounds.append(i)
+        else:
+            raise ValueError(f"invalid bound {bound} for ais {x}")
+
+    for dim in source_shape[len(key):]:
+        bounds.append(slice(0, dim, 1))
+        shape.append(dim)
+
+    return bounds, shape
 
 
 def strides_for(shape):

@@ -91,13 +91,16 @@ class TensorTests(unittest.TestCase):
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
     def testMul(self):
-        x = Tensor((2, 1), [0, 1])
-        y = Tensor((2, 1), [5, 4])
+        x_np = np.array([0, 1]).reshape((2, 1))
+        x_tc = Tensor((2, 1), [0, 1])
 
-        expected = Tensor((2, 1), [0, 4])
-        actual = x * y
+        y_np = np.array([5, 4]).reshape((2,))
+        y_tc = Tensor((2,), [5, 4])
 
-        self.assertTrue(all(expected == actual))
+        expected = x_np * y_np
+        actual = x_tc * y_tc
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
 
 if __name__ == "__main__":
