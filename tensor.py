@@ -31,25 +31,13 @@ class Tensor(object):
             num_blocks = size // block_size
             num_blocks += 1 if size % block_size else 0
 
-        block_axis = 0
-        while np.product(shape[block_axis:]) > block_size:
-            block_axis += 1
+        assert block_size
 
-        if num_blocks == 1:
-            assert size == block_size
-            buffers = [Buffer(size)]
-        elif size % block_size == 0:
-            buffers = [Buffer(block_size) for _ in range(num_blocks)]
-        else:
+        if size % block_size:
             buffers = [Buffer(block_size) for _ in range(num_blocks - 1)]
             buffers.append(Buffer(size % block_size))
-
-        assert len(buffers) == num_blocks, f"there are {num_blocks} blocks but {len(buffers)} buffers"
-        assert size == sum(len(buffer) for buffer in buffers)
-        assert all(len(buffer) == block_size for buffer in buffers[:-1])
-        assert len(buffers[-1]) <= block_size
-
-        block_shape = shape[block_axis:]
+        else:
+            buffers = [Buffer(block_size) for _ in range(num_blocks)]
 
         if data is not None:
             for offset, n in enumerate(data):
@@ -57,10 +45,18 @@ class Tensor(object):
                 buffer = buffers[offset // block_size]
                 buffer[offset % block_size] = n
 
-        if size % block_size:
-            last_block_shape = block_shape
-            last_block_shape[0] = int(block_shape[0] // np.product(block_shape[1:]))
+        block_axis = block_axis_for(shape, block_size)
 
+        block_shape = shape[block_axis:]
+        block_shape[0] = int(np.ceil(block_size / np.product(block_shape[1:])))
+        map_shape = shape[:block_axis]
+        map_shape.append(int(np.ceil(shape[block_axis] / block_shape[0])))
+
+        assert len(block_shape) + len(map_shape) == len(shape) + 1
+
+        if size % block_size:
+            last_block_shape = list(block_shape)
+            last_block_shape[0] = len(buffers[-1]) // np.product(block_shape[1:])
             self.blocks = [Block(block_shape, buffer) for buffer in buffers[:-1]]
             self.blocks.append(Block(last_block_shape, buffers[-1]))
         else:
@@ -68,7 +64,6 @@ class Tensor(object):
 
         assert self.blocks
 
-        map_shape = shape[:block_axis] + [int(np.product(shape[block_axis:]) // block_size)]
         self.block_map = Block(map_shape, range(len(self.blocks)))
         self.shape = tuple(int(dim) for dim in shape)
 
@@ -115,9 +110,7 @@ class Tensor(object):
         bounds, shape = slice_bounds(self.shape, item)
 
         # characterize the source tensor (this tensor)
-        block_axis = 0
-        while np.product(self.shape[block_axis:]) > block_size:
-            block_axis += 1
+        block_axis = block_axis_for(self.shape, block_size)
 
         # characterize the output tensor (the slice of this tensor)
         block_map = self.block_map[bounds[:block_axis]] if block_axis else self.block_map
@@ -143,10 +136,7 @@ class Tensor(object):
             return self
 
         # characterize the source tensor (this tensor)
-        block_size = len(self.blocks[0])
-        block_axis = 0
-        while np.product(self.shape[block_axis:]) > block_size:
-            block_axis += 1
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
 
         # characterize the output tensor (the broadcasted view of this tensor)
         shape = list(shape)
@@ -176,12 +166,37 @@ class Tensor(object):
 
     def transpose(self, permutation=None):
         permutation = check_permutation(self.shape, permutation)
+
+        if all(i == x for i, x in enumerate(permutation)):
+            return self
+
+        # characterize the source tensor (this tensor)
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
+
+        # characterize the output tensor (the transpose of this tensor)
         shape = tuple(self.shape[x] for x in permutation)
-        raise NotImplementedError("Tensor.transpose")
+        block_map = self.block_map.transpose(permutation[:block_axis + 1])
+        blocks = [block.transpose(permutation[block_axis:]) for block in self.blocks]
+
+        return TensorView(blocks, block_map, shape)
 
 
 class TensorView(Tensor):
     def __init__(self, blocks, block_map, shape):
+        assert blocks
+        assert isinstance(block_map, Block), f"invalid block map: {block_map}"
+        assert shape
+
         self.blocks = blocks
         self.block_map = block_map
         self.shape = tuple(int(dim) for dim in shape)
+
+
+def block_axis_for(shape, block_size):
+    assert shape and all(shape) and all(dim > 0 for dim in shape)
+
+    block_axis = len(shape) - 1
+    while np.product(shape[block_axis:]) < block_size:
+        block_axis -= 1
+
+    return block_axis

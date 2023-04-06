@@ -87,6 +87,18 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(expected.shape, actual.shape)
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
+    def testTranspose(self):
+        shape = [2, 3, 4]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([1, 2, 0])
+        actual = x_tc.transpose([1, 2, 0])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
 
 class TensorTests(unittest.TestCase):
     def testAdd(self):
@@ -125,6 +137,18 @@ class TensorTests(unittest.TestCase):
         expected = x_np[0, :, :2]
         actual = x_tc[0, :, :2]
 
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose(self):
+        shape = [5, 3, 4]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Tensor(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([0, 2, 1])
+        actual = x_tc.transpose([0, 2, 1])
+
+        self.assertEqual(expected.shape, actual.shape)
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
 

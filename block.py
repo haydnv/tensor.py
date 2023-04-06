@@ -9,6 +9,7 @@ IDEAL_BLOCK_SIZE = 24
 class Buffer(object):
     def __init__(self, size, data=None):
         size = int(size)
+        assert size
 
         if data is None:
             self._data = [0] * size
@@ -255,6 +256,10 @@ class Block(object):
 
     def transpose(self, permutation=None):
         permutation = check_permutation(self.shape, permutation)
+
+        if all(i == x for i, x in enumerate(permutation)):
+            return self
+
         shape = tuple(self.shape[x] for x in permutation)
         strides = [self.strides[x] for x in permutation]
         return BlockView(self, shape, strides)
