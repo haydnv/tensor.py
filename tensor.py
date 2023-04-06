@@ -1,7 +1,7 @@
 import numpy as np
 
 from block import Buffer, Block
-from schema import broadcast, check_permutation, slice_bounds
+from schema import broadcast, check_permutation, slice_bounds, strides_for
 
 
 IDEAL_BLOCK_SIZE = 24
@@ -16,39 +16,46 @@ class Tensor(object):
         assert size
 
         if size < (2 * IDEAL_BLOCK_SIZE):
+            block_size = size
             num_blocks = 1
         elif len(shape) == 1 and size % IDEAL_BLOCK_SIZE == 0:
+            block_size = IDEAL_BLOCK_SIZE
             num_blocks = size // IDEAL_BLOCK_SIZE
         elif len(shape) == 1 or shape[-2] * shape[-1] > (IDEAL_BLOCK_SIZE * 2):
+            block_size = IDEAL_BLOCK_SIZE
             num_blocks = (size // IDEAL_BLOCK_SIZE)
             num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
         else:
-            num_blocks = IDEAL_BLOCK_SIZE // (shape[-2] * shape[-1])
-            num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
-
-        block_size = size // num_blocks
+            matrix_size = shape[-2] * shape[-1]
+            block_size = IDEAL_BLOCK_SIZE + (matrix_size - (IDEAL_BLOCK_SIZE % matrix_size))
+            num_blocks = size // block_size
+            num_blocks += 1 if size % block_size else 0
 
         block_axis = 0
-        while np.product(shape[block_axis:]) < block_size:
+        while np.product(shape[block_axis:]) > block_size:
             block_axis += 1
 
         if num_blocks == 1:
-            buffers = [Buffer(block_size)]
+            assert size == block_size
+            buffers = [Buffer(size)]
+        elif size % block_size == 0:
+            buffers = [Buffer(block_size) for _ in range(num_blocks)]
         else:
             buffers = [Buffer(block_size) for _ in range(num_blocks - 1)]
+            buffers.append(Buffer(size % block_size))
 
-            if size % num_blocks:
-                buffers.append(Buffer(size % block_size))
+        assert len(buffers) == num_blocks, f"there are {num_blocks} blocks but {len(buffers)} buffers"
+        assert size == sum(len(buffer) for buffer in buffers)
+        assert all(len(buffer) == block_size for buffer in buffers[:-1])
+        assert len(buffers[-1]) <= block_size
 
         block_shape = shape[block_axis:]
 
         if data is not None:
             for offset, n in enumerate(data):
                 assert isinstance(n, (complex, float, int)), f"not a number: {n}"
-                buffers[offset // block_size][offset % block_size] = n
-
-            if offset + 1 != size:
-                raise ValueError(f"{offset + 1} elements were provided for a Tensor of size {size}")
+                buffer = buffers[offset // block_size]
+                buffer[offset % block_size] = n
 
         if size % block_size:
             last_block_shape = block_shape
@@ -60,9 +67,6 @@ class Tensor(object):
             self.blocks = [Block(block_shape, buffer) for buffer in buffers]
 
         assert self.blocks
-        assert size == sum(len(block) for block in self.blocks)
-        assert all(len(block) == block_size for block in self.blocks[:-1])
-        assert len(self.blocks[-1]) <= block_size
 
         map_shape = shape[:block_axis] + [int(np.product(shape[block_axis:]) // block_size)]
         self.block_map = Block(map_shape, range(len(self.blocks)))
@@ -107,11 +111,19 @@ class Tensor(object):
             return self.blocks[offset // block_size][offset % block_size]
 
         bounds, shape = slice_bounds(self.shape, item)
-        return TensorSlice(self, shape, bounds)
+
+        # characterize the source tensor (this tensor)
+        block_size = len(self) // len(self.block_map)
+        block_axis = 0
+        while block_axis < len(self.shape) and np.product(shape[block_axis:]) < block_size:
+            block_axis += 1
+
+        # characterize the output tensor (the slice of this tensor)
+        raise NotImplementedError
 
     def __iter__(self):
         for i in self.block_map:
-            for n in self.get_block(i):
+            for n in self.blocks[i]:
                 yield n
 
     def __len__(self):
@@ -125,9 +137,9 @@ class Tensor(object):
             return self
 
         # characterize the source tensor (this tensor)
-        block_size = len(self) // len(self.block_map)
+        block_size = len(self.blocks[0])
         block_axis = 0
-        while np.product(shape[block_axis:]) < block_size:
+        while np.product(self.shape[block_axis:]) > block_size:
             block_axis += 1
 
         # characterize the output tensor (the broadcasted view of this tensor)
@@ -137,12 +149,9 @@ class Tensor(object):
         map_shape = shape[:offset + block_axis]
 
         block_map = self.block_map.broadcast(map_shape) if map_shape else self.block_map
-        blocks = [self.get_block(i).broadcast(block_shape) for i in block_map]
+        blocks = [self.blocks[i].broadcast(block_shape) for i in block_map]
 
         return TensorView(blocks, block_map, shape)
-
-    def get_block(self, i):
-        return self.blocks[int(i)]
 
     def reduce_sum(self, axes=None):
         if axes is None:
@@ -165,25 +174,8 @@ class Tensor(object):
         raise NotImplementedError("Tensor.transpose")
 
 
-class TensorSlice(Tensor):
-    def __init__(self, source, shape, bounds):
-        self.bounds = bounds
-        self.shape = shape
-        self.source = source
-
-        self.block_map = "TODO"
-
-    def get_block(self, i):
-        raise NotImplementedError
-
-
 class TensorView(Tensor):
     def __init__(self, blocks, block_map, shape):
         self.blocks = blocks
         self.block_map = block_map
         self.shape = tuple(int(dim) for dim in shape)
-
-    def get_block(self, i):
-        # TODO: slice self.block_map to find the list of source blocks, then concatenate a slice of each
-
-        return self.blocks[i]
