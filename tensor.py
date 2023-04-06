@@ -175,10 +175,17 @@ class Tensor(object):
 
         # characterize the output tensor (the transpose of this tensor)
         shape = tuple(self.shape[x] for x in permutation)
-        block_map = self.block_map.transpose(permutation[:block_axis + 1])
-        blocks = [block.transpose(permutation[block_axis:]) for block in self.blocks]
 
-        return TensorView(blocks, block_map, shape)
+        map_permutation = [x for x in permutation if x <= block_axis]
+        block_map = self.block_map.transpose(map_permutation)
+
+        block_permutation = [x - block_axis for x in permutation if x >= block_axis]
+        blocks = [block.transpose(block_permutation) for block in self.blocks]
+
+        if map_permutation[-1] == block_permutation[0] and map_permutation[:-1] + block_permutation == permutation:
+            return TensorView(blocks, block_map, shape)
+
+        raise NotImplementedError
 
 
 class TensorView(Tensor):
