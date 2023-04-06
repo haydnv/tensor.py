@@ -106,6 +106,7 @@ class Block(object):
         item = tuple(item)
         ndim = len(self.shape)
 
+        assert len(item) <= ndim, f"invalid bounds for {self}: {item}"
         assert not any(isinstance(i, np.int64) for i in item)
 
         if len(item) == ndim and all(isinstance(i, int) for i in item):
@@ -281,7 +282,7 @@ class BlockSlice(Block):
     def get_offset(self, i):
         assert i < len(self)
 
-        coord = tuple((i // stride) % dim for dim, stride in zip(self.shape, self.strides))
+        coord = tuple((i // stride) % dim if stride else 0 for dim, stride in zip(self.shape, self.strides))
 
         x = 0
         source_coord = []

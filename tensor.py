@@ -105,6 +105,8 @@ class Tensor(object):
         ndim = len(self.shape)
         block_size = len(self.blocks[0])
 
+        assert len(item) <= ndim
+
         if len(item) == ndim and all(isinstance(i, int) for i in item):
             coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
             offset = sum(i * stride for i, stride in zip(coord, strides_for(self.shape)))
@@ -113,13 +115,17 @@ class Tensor(object):
         bounds, shape = slice_bounds(self.shape, item)
 
         # characterize the source tensor (this tensor)
-        block_size = len(self) // len(self.block_map)
         block_axis = 0
-        while block_axis < len(self.shape) and np.product(shape[block_axis:]) < block_size:
+        while np.product(self.shape[block_axis:]) > block_size:
             block_axis += 1
 
         # characterize the output tensor (the slice of this tensor)
-        raise NotImplementedError
+        block_map = self.block_map[bounds[:block_axis]] if block_axis else self.block_map
+        blocks = []
+        for block in self.blocks:
+            blocks.append(block[bounds[block_axis:]])
+
+        return TensorView(blocks, block_map, shape)
 
     def __iter__(self):
         for i in self.block_map:
