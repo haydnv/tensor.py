@@ -13,6 +13,19 @@ class BufferTests(unittest.TestCase):
 
 
 class BlockTests(unittest.TestCase):
+    def testConcat(self):
+        x_np = np.arange(24).reshape((2, 3, 4))
+        y_np = np.arange(16).reshape((2, 2, 4))
+
+        x_tc = Block((2, 3, 4), (int(n) for n in x_np.flatten()))
+        y_tc = Block((2, 2, 4), (int(n) for n in y_np.flatten()))
+
+        expected = np.concatenate([x_np, y_np], 1)
+        actual = Block.concatenate([x_tc, y_tc], 1)
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
     def testMatMul(self):
         a_np = np.arange(6).reshape((2, 3))
         a_tc = Block((2, 3), range(6))
@@ -99,6 +112,18 @@ class TensorTests(unittest.TestCase):
 
         expected = x_np * y_np
         actual = x_tc * y_tc
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testSlice(self):
+        shape = (3, 2, 4, 5)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+
+        expected = x_np[0, :, :2]
+        actual = x_tc[0, :, :2]
 
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 

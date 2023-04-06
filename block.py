@@ -70,6 +70,27 @@ class Buffer(object):
 
 
 class Block(object):
+    @staticmethod
+    def concatenate(blocks, axis=0):
+        assert blocks
+
+        assert all(block.shape[:axis] == tuple(blocks[0].shape[:axis]) for block in blocks)
+        assert all(block.shape[axis + 1:] == tuple(blocks[0].shape[axis + 1:]) for block in blocks)
+
+        ndim = len(blocks[0].shape)
+        shape = list(blocks[0].shape)
+        shape[axis] = sum(block.shape[axis] for block in blocks)
+        concatenated = Block(shape)
+
+        offset = 0
+        selector = [slice(None) for _ in range(ndim)]
+        for i, block in enumerate(blocks):
+            selector[axis] = slice(offset, offset + block.shape[axis])
+            concatenated[selector] = block
+            offset += block.shape[axis]
+
+        return concatenated
+
     def __init__(self, shape, data=None):
         assert shape
 
@@ -155,7 +176,22 @@ class Block(object):
             self.buffer[offset] = value
             return
 
-        raise NotImplementedError
+        bounds, shape = slice_bounds(self.shape, key)
+        value = value.broadcast(shape)
+
+        for i, n in enumerate(value):
+            source_coord = tuple((i // stride) % dim for dim, stride in zip(value.shape, value.strides))
+
+            x = 0
+            coord = []
+            for bound in bounds:
+                if isinstance(bound, int):
+                    coord.append(bound)
+                else:
+                    coord.append(bound.start + (source_coord[x] * bound.step))
+                    x += 1
+
+            self[coord] = n
 
     def __repr__(self):
         return f"(block with shape {self.shape})"
@@ -169,11 +205,12 @@ class Block(object):
     def _broadcast_op(self, other, op):
         this, that = broadcast(self, other)
         assert this.shape == that.shape
-        buffer = [op(ln, rn) for ln, rn in zip(this, that)]  # TODO: is there a way to avoid this allocation?
+        buffer = [op(ln, rn) for ln, rn in zip(this, that)]
         return Block(this.shape, buffer)
 
     def broadcast(self, shape):
         assert shape
+        assert all(dim > 0 for dim in shape), f"invalid shape for broadcast: {shape}"
 
         if shape == self.shape:
             return self

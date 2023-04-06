@@ -37,19 +37,23 @@ def check_permutation(shape, permutation):
 
 
 def slice_bounds(source_shape, key):
+    assert all(dim > 0 for dim in source_shape)
+
     bounds = []
     shape = []
 
     for x, bound in enumerate(key):
         dim = source_shape[x]
+        assert dim > 0
 
         if isinstance(bound, slice):
-            start = 0 if bound.start is None else bound.start if bound.start > 0 else dim + bound.start
-            stop = dim if bound.stop is None else bound.stop if bound.stop > 0 else dim + bound.stop
+            start = 0 if bound.start is None else bound.start if bound.start >= 0 else dim + bound.start
+            stop = dim if bound.stop is None else bound.stop if bound.stop >= 0 else dim + bound.stop
             step = 1 if bound.step is None else bound.step
 
+            assert stop >= start, f"invalid bounds: {key}"
             assert 0 <= start <= dim
-            assert 0 <= stop <= dim
+            assert 0 < stop <= dim
             assert 0 < step <= dim
 
             bounds.append(slice(start, stop, step))
@@ -64,6 +68,8 @@ def slice_bounds(source_shape, key):
     for dim in source_shape[len(key):]:
         bounds.append(slice(0, dim, 1))
         shape.append(dim)
+
+    assert all(dim > 0 for dim in shape)
 
     return bounds, shape
 
