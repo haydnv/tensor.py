@@ -96,7 +96,11 @@ class Tensor(object):
         return Tensor(this.shape, (lb / rb for lb, rb in zip(this, that)))
 
     def __getitem__(self, item):
-        item = tuple(item)
+        if hasattr(item, "__iter__"):
+            item = tuple(item)
+        else:
+            item = (item,)
+
         ndim = len(self.shape)
         block_size = len(self.blocks[0])
 
@@ -113,10 +117,39 @@ class Tensor(object):
         block_axis = block_axis_for(self.shape, block_size)
 
         # characterize the output tensor (the slice of this tensor)
-        block_map = self.block_map[bounds[:block_axis]] if block_axis else self.block_map
+        block_map_bounds = bounds[:block_axis]
+        if isinstance(bounds[block_axis], slice):
+            stride = self.blocks[0].shape[0]
+            bound = bounds[block_axis]
+            bound = slice(int(np.floor(bound.start / stride)), int(np.ceil(bound.stop / stride)))
+        else:
+            bound = bounds[block_axis] // self.block_map.shape[-1]
+
+        block_map_bounds.append(bound)
+        block_map = self.block_map[block_map_bounds]
+
+        global_bound = bounds[block_axis]
+        if isinstance(global_bound, slice):
+            stride = self.blocks[0].shape[0]
+            global_bound_size = (global_bound.stop - global_bound.start) // global_bound.step
+            assert len(block_map) == np.ceil(global_bound_size / stride)
+            if len(block_map) == 1:
+                local_bounds = [global_bound]
+            else:
+                local_bounds = [slice(global_bound.start % stride, None, global_bound.step)]
+                local_bounds += [slice(None, None, global_bound.step)] * (len(block_map) - 2)
+                local_bounds += [slice(None, global_bound.stop % stride, global_bound.step)]
+        else:
+            # a single coordinate on the block axis should mean there is a single block selected
+            assert len(block_map) == 1
+            local_bounds = [global_bound]
+
         blocks = []
-        for block in self.blocks:
-            blocks.append(block[bounds[block_axis:]])
+        for (i, bound) in zip(block_map, local_bounds):
+            block = self.blocks[i]
+            block_bounds = bounds[block_axis:]
+            block_bounds[0] = bound
+            blocks.append(block[block_bounds])
 
         return TensorView(blocks, block_map, shape)
 
@@ -129,7 +162,37 @@ class Tensor(object):
         return np.product(self.shape)
 
     def __setitem__(self, key, value):
-        raise NotImplementedError
+        key = tuple(key)
+        ndim = len(self.shape)
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
+
+        if len(key) == ndim and all(isinstance(i, int) for i in key):
+            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(key)]
+            map_coord = coord[:block_axis]
+            map_coord.append(coord[block_axis] // self.block_map.shape[-1])
+            block_coord = coord[block_axis:]
+            block_coord[0] = block_coord[0] // map_coord[-1]
+            block = self.block_map[map_coord]
+            block[block_coord] = value
+            return
+
+        bounds, shape = slice_bounds(self.shape, key)
+        value = value.broadcast(shape)
+        strides = strides_for(value.shape)
+
+        for i, n in enumerate(value):
+            source_coord = tuple((i // stride) % dim for dim, stride in zip(value.shape, strides))
+
+            x = 0
+            coord = []
+            for bound in bounds:
+                if isinstance(bound, int):
+                    coord.append(bound)
+                else:
+                    coord.append(bound.start + (source_coord[x] * bound.step))
+                    x += 1
+
+            self[coord] = n
 
     def broadcast(self, shape):
         if self.shape == shape:
@@ -171,21 +234,48 @@ class Tensor(object):
             return self
 
         # characterize the source tensor (this tensor)
+        ndim = len(self.shape)
         block_axis = block_axis_for(self.shape, len(self.blocks[0]))
 
         # characterize the output tensor (the transpose of this tensor)
-        shape = tuple(self.shape[x] for x in permutation)
-
-        map_permutation = [x for x in permutation if x <= block_axis]
+        map_permutation = [x for x in permutation if x < block_axis] + [block_axis]
         block_map = self.block_map.transpose(map_permutation)
 
-        block_permutation = [x - block_axis for x in permutation if x >= block_axis]
+        block_permutation = [0] + [x - block_axis for x in permutation if x > block_axis]
         blocks = [block.transpose(block_permutation) for block in self.blocks]
 
-        if map_permutation[-1] == block_permutation[0] and map_permutation[:-1] + block_permutation == permutation:
-            return TensorView(blocks, block_map, shape)
+        # return a view if possible
+        shape = [self.shape[x] for x in map_permutation[:-1]] + [self.shape[block_axis + x] for x in block_permutation]
+        view = TensorView(blocks, block_map, shape)
 
-        raise NotImplementedError
+        view_axes = map_permutation[:-1] + [block_axis] + [block_axis + x for x in block_permutation[1:]]
+        assert len(view_axes) == ndim and all(x in view_axes for x in range(ndim))
+        view_permutation = [permutation.index(x) for x in view_axes]
+        assert len(view_axes) == ndim and all(x in view_axes for x in range(ndim))
+        assert permutation == [view_axes[x] for x in view_permutation]
+
+        if all(i == x for i, x in enumerate(view_permutation)):
+            return view
+
+        # otherwise, construct a new tensor
+        shape = [self.shape[x] for x in permutation]
+        transpose = Tensor(shape)
+
+        # and construct the remaining permutation of the view
+
+        axes = [x for i, x in enumerate(view_permutation) if x != i]
+        dims = [view.shape[x] for i, x in enumerate(view_permutation) if x != i]
+        strides = strides_for(dims)
+
+        # for each coordinate within the dimensions to transpose
+        for o in range(int(np.product(dims))):
+            coord = tuple((o // stride) % dim for dim, stride in zip(dims, strides))
+
+            # read a slice of the view
+            # transpose the slice
+            # write it to the output tensor
+
+        return transpose
 
 
 class TensorView(Tensor):

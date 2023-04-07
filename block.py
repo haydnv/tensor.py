@@ -104,7 +104,11 @@ class Block(object):
         return self._broadcast_op(other, lambda l, r: l + r)
 
     def __getitem__(self, item):
-        item = tuple(item)
+        if hasattr(item, "__iter__"):
+            item = tuple(item)
+        else:
+            item = (item,)
+
         ndim = len(self.shape)
 
         assert len(item) <= ndim, f"invalid bounds for {self}: {item}"

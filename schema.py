@@ -29,7 +29,7 @@ def check_permutation(shape, permutation):
     else:
         permutation = [ndim + x if x < 0 else x for x in permutation]
 
-    assert len(permutation) == ndim
+    assert len(permutation) == ndim, f"invalid permutation {permutation} for {ndim} dimensions"
     assert all(0 <= x < ndim for x in permutation)
     assert all(x in permutation for x in range(ndim))
 
@@ -52,9 +52,9 @@ def slice_bounds(source_shape, key):
             step = 1 if bound.step is None else bound.step
 
             assert stop >= start, f"invalid bounds: {key}"
-            assert 0 <= start <= dim
-            assert 0 < stop <= dim
-            assert 0 < step <= dim
+            assert 0 <= start <= dim, f"bound {bound} has invalid start {start} for dimension {dim}"
+            assert 0 < stop <= dim, f"bound {bound} has invalid stop {stop} for dimension {dim}"
+            assert 0 < step <= dim, f"bound {bound} has invalid step {step} for dimension {dim}"
 
             bounds.append(slice(start, stop, step))
             shape.append((stop - start) // step)

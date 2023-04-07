@@ -127,7 +127,7 @@ class TensorTests(unittest.TestCase):
 
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
-    def testSlice(self):
+    def testSlice_even(self):
         shape = (3, 2, 4, 5)
         size = int(np.product(shape))
 
@@ -139,7 +139,19 @@ class TensorTests(unittest.TestCase):
 
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
-    def testTranspose(self):
+    def testSlice_odd(self):
+        shape = (101,)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+
+        expected = x_np[:51]
+        actual = x_tc[:51]
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose_last_axis(self):
         shape = [5, 3, 4]
 
         x_np = np.arange(np.product(shape)).reshape(shape)
@@ -147,6 +159,18 @@ class TensorTests(unittest.TestCase):
 
         expected = x_np.transpose([0, 2, 1])
         actual = x_tc.transpose([0, 2, 1])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose_all_axes(self):
+        shape = [4, 6, 3, 5]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Tensor(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([3, 1, 0, 2])
+        actual = x_tc.transpose([3, 1, 0, 2])
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
