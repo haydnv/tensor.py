@@ -1,191 +1,317 @@
-import functools
-import itertools
-import math
 import numpy as np
 
-from collections import OrderedDict
+from block import Buffer, Block
+from schema import broadcast, check_permutation, slice_bounds, strides_for
+
+
+IDEAL_BLOCK_SIZE = 24
 
 
 class Tensor(object):
-    def __init__(self, shape, dtype=np.int32):
-        if not all(isinstance(dim, int) for dim in shape):
-            raise ValueError
+    def __init__(self, shape, data=None):
+        assert all(isinstance(dim, int) and dim > 0 for dim in shape), f"invalid shape: {shape}"
 
-        if any(dim < 0 for dim in shape):
-            raise ValueError
+        shape = list(shape)
+        size = np.product(shape)
+        assert size
 
-        self.dtype = dtype
-        self.shape = tuple(shape)
-        self.ndim = len(shape)
-        self.size = product(shape)
+        if size < (2 * IDEAL_BLOCK_SIZE):
+            block_size = size
+            num_blocks = 1
+        elif len(shape) == 1 and size % IDEAL_BLOCK_SIZE == 0:
+            block_size = IDEAL_BLOCK_SIZE
+            num_blocks = size // IDEAL_BLOCK_SIZE
+        elif len(shape) == 1 or shape[-2] * shape[-1] > (IDEAL_BLOCK_SIZE * 2):
+            block_size = IDEAL_BLOCK_SIZE
+            num_blocks = (size // IDEAL_BLOCK_SIZE)
+            num_blocks += 1 if size % IDEAL_BLOCK_SIZE else 0
+        else:
+            matrix_size = shape[-2] * shape[-1]
+            block_size = IDEAL_BLOCK_SIZE + (matrix_size - (IDEAL_BLOCK_SIZE % matrix_size))
+            num_blocks = size // block_size
+            num_blocks += 1 if size % block_size else 0
 
-    def __eq__(self, other):
-        raise NotImplementedError
+        assert block_size
 
-    def __getitem__(self, _match):
+        if size % block_size:
+            buffers = [Buffer(block_size) for _ in range(num_blocks - 1)]
+            buffers.append(Buffer(size % block_size))
+        else:
+            buffers = [Buffer(block_size) for _ in range(num_blocks)]
+
+        if data is not None:
+            for offset, n in enumerate(data):
+                assert isinstance(n, (complex, float, int)), f"not a number: {n}"
+                buffer = buffers[offset // block_size]
+                buffer[offset % block_size] = n
+
+        block_axis = block_axis_for(shape, block_size)
+
+        block_shape = shape[block_axis:]
+        block_shape[0] = int(np.ceil(block_size / np.product(block_shape[1:])))
+        map_shape = shape[:block_axis]
+        map_shape.append(int(np.ceil(shape[block_axis] / block_shape[0])))
+
+        assert len(block_shape) + len(map_shape) == len(shape) + 1
+
+        if size % block_size:
+            last_block_shape = list(block_shape)
+            last_block_shape[0] = len(buffers[-1]) // np.product(block_shape[1:])
+            self.blocks = [Block(block_shape, buffer) for buffer in buffers[:-1]]
+            self.blocks.append(Block(last_block_shape, buffers[-1]))
+        else:
+            self.blocks = [Block(block_shape, buffer) for buffer in buffers]
+
+        assert self.blocks
+
+        self.block_map = Block(map_shape, range(len(self.blocks)))
+        self.shape = tuple(int(dim) for dim in shape)
+
+    def __add__(self, other):
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb + rb for lb, rb in zip(this, that)))
+
+    def __matmul__(self, other):
         raise NotImplementedError
 
     def __mul__(self, other):
-        raise NotImplementedError
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb * rb for lb, rb in zip(this, that)))
 
-    def __setitem__(self, match, value):
-        raise NotImplementedError
+    def __eq__(self, other):
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb == rb for lb, rb in zip(this, that)))
+
+    def __repr__(self):
+        return f"tensor with shape {self.shape}"
 
     def __sub__(self, other):
-        raise NotImplementedError
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb - rb for lb, rb in zip(this, that)))
 
-    def __str__(self):
-        return str(self.to_nparray())
+    def __truediv__(self, other):
+        this, that = broadcast(self, other)
+        assert this.shape == that.shape
+        return Tensor(this.shape, (lb / rb for lb, rb in zip(this, that)))
 
-    def __xor__(self, other):
-        raise NotImplementedError
+    def __getitem__(self, item):
+        if hasattr(item, "__iter__"):
+            item = tuple(item)
+        else:
+            item = (item,)
 
-    def all(self):
-        raise NotImplementedError
+        ndim = len(self.shape)
+        block_size = len(self.blocks[0])
 
-    def any(self):
-        raise NotImplementedError
+        assert len(item) <= ndim
 
-    def as_type(self):
-        raise NotImplementedError
+        if len(item) == ndim and all(isinstance(i, int) for i in item):
+            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(item)]
+            offset = sum(i * stride for i, stride in zip(coord, strides_for(self.shape)))
+            return self.blocks[offset // block_size][offset % block_size]
+
+        bounds, shape = slice_bounds(self.shape, item)
+
+        # characterize the source tensor (this tensor)
+        block_axis = block_axis_for(self.shape, block_size)
+
+        # characterize the output tensor (the slice of this tensor)
+        block_map_bounds = bounds[:block_axis]
+        if isinstance(bounds[block_axis], slice):
+            stride = self.blocks[0].shape[0]
+            bound = bounds[block_axis]
+            bound = slice(int(np.floor(bound.start / stride)), int(np.ceil(bound.stop / stride)))
+        else:
+            bound = bounds[block_axis] // self.block_map.shape[-1]
+
+        block_map_bounds.append(bound)
+        block_map = self.block_map[block_map_bounds]
+        assert block_map
+
+        global_bound = bounds[block_axis]
+        if isinstance(global_bound, slice):
+            stride = self.blocks[0].shape[0]
+            global_bound_size = (global_bound.stop - global_bound.start) // global_bound.step
+            assert len(block_map) == np.ceil(global_bound_size / stride)
+            if len(block_map) == 1:
+                local_bounds = [global_bound]
+            else:
+                start = global_bound.start % stride
+                stop = global_bound.stop % stride
+                stop = stop if stop else stride
+
+                local_bounds = [slice(start, None, global_bound.step)]
+                local_bounds += [slice(None, None, global_bound.step)] * (len(block_map) - 2)
+                local_bounds += [slice(None, stop, global_bound.step)]
+        else:
+            # a single coordinate on the block axis should mean there is a single block selected
+            assert len(block_map) == 1
+            local_bounds = [global_bound]
+
+        blocks = []
+        for (i, bound) in zip(block_map, local_bounds):
+            block = self.blocks[i]
+            block_bounds = bounds[block_axis:]
+            block_bounds[0] = bound
+            blocks.append(block[block_bounds])
+
+        return TensorView(blocks, Block(block_map.shape, range(len(block_map))), shape)
+
+    def __iter__(self):
+        for i in self.block_map:
+            for n in self.blocks[i]:
+                yield n
+
+    def __len__(self):
+        return np.product(self.shape)
+
+    def __setitem__(self, key, value):
+        key = tuple(key)
+        ndim = len(self.shape)
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
+        block_shape = self.blocks[0].shape
+
+        if len(key) == ndim and all(isinstance(i, int) for i in key):
+            map_coord = list(key[:block_axis])
+            map_coord.append(key[block_axis] // block_shape[0])
+            block = self.blocks[self.block_map[map_coord]]
+            block_coord = list(key[block_axis:])
+            block_coord[0] = key[block_axis] % block_shape[0]
+            block[block_coord] = value
+            return
+
+        bounds, shape = slice_bounds(self.shape, key)
+        value = value.broadcast(shape)
+        strides = strides_for(value.shape)
+
+        for i, n in enumerate(value):
+            source_coord = tuple((i // stride) % dim for dim, stride in zip(value.shape, strides))
+
+            x = 0
+            coord = []
+            for bound in bounds:
+                if isinstance(bound, int):
+                    coord.append(bound)
+                else:
+                    coord.append(bound.start + (source_coord[x] * bound.step))
+                    x += 1
+
+            self[coord] = n
 
     def broadcast(self, shape):
+        if self.shape == tuple(shape):
+            return self
+
+        # characterize the source tensor (this tensor)
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
+
+        # characterize the output tensor (the broadcasted view of this tensor)
+        shape = list(shape)
+        offset = len(shape) - len(self.shape)
+        block_shape = shape[offset + block_axis:]
+        map_shape = shape[:offset + block_axis]
+
+        block_map = self.block_map.broadcast(map_shape) if map_shape else self.block_map
+        blocks = [self.blocks[i].broadcast(block_shape) for i in self.block_map]
+
+        return TensorView(blocks, block_map, shape)
+
+    def reduce_sum(self, axes=None):
+        if axes is None:
+            return sum(block.reduce_sum() for block in self.blocks)
+
+        axes = sorted([axes] if isinstance(axes, int) else axes)
         raise NotImplementedError
 
-    def copy(self):
-        raise NotImplementedError
-
-    def expand_dims(self, axis):
-        raise NotImplementedError
-
-    def product(self, _axis=None):
-        raise NotImplementedError
-
-    def sum(self, _axis=None):
-        raise NotImplementedError
+    def reshape(self, shape):
+        if shape == self.shape:
+            return self
+        elif np.product(shape) == np.product(self.shape):
+            return Tensor(shape, self)
+        else:
+            raise ValueError(f"cannot reshape from {self.shape} into {shape}")
 
     def transpose(self, permutation=None):
-        raise NotImplementedError
+        permutation = check_permutation(self.shape, permutation)
 
-    def to_nparray(self):
-        arr = np.zeros(self.shape, self.dtype)
-        for coord in itertools.product(*[range(dim) for dim in self.shape]):
-            arr[coord] = self[coord]
-        return arr
+        if all(i == x for i, x in enumerate(permutation)):
+            return self
 
+        # characterize the source tensor (this tensor)
+        ndim = len(self.shape)
+        block_axis = block_axis_for(self.shape, len(self.blocks[0]))
 
-def affected(match, shape):
-    affected = []
-    for axis in range(len(match)):
-        if match[axis] is None:
-            affected.append(range(shape[axis]))
-        elif isinstance(match[axis], slice):
-            s = match[axis]
-            affected.append(range(s.start, s.stop, s.step))
-        elif isinstance(match[axis], tuple):
-            affected.append(match[axis])
-        elif match[axis] < 0:
-            affected.append([shape[axis] + match[axis]])
-        else:
-            affected.append([match[axis]])
+        # characterize the output tensor (the transpose of this tensor)
+        map_permutation = [x for x in permutation if x < block_axis] + [block_axis]
+        block_map = self.block_map.transpose(map_permutation)
 
-    for axis in range(len(match), len(shape)):
-        affected.append(range(shape[axis]))
+        block_permutation = [0] + [x - block_axis for x in permutation if x > block_axis]
+        blocks = [block.transpose(block_permutation) for block in self.blocks]
 
-    return affected
+        # return a view if possible
+        shape = [self.shape[x] for x in map_permutation[:-1]] + [self.shape[block_axis + x] for x in block_permutation]
+        view = TensorView(blocks, block_map, shape)
 
+        view_axes = map_permutation[:-1] + [block_axis] + [block_axis + x for x in block_permutation[1:]]
+        assert len(view_axes) == ndim and all(x in view_axes for x in range(ndim))
+        view_permutation = [permutation.index(x) for x in view_axes]
+        assert len(view_axes) == ndim and all(x in view_axes for x in range(ndim))
+        assert permutation == [view_axes[x] for x in view_permutation]
 
-def broadcast(left, right):
-    if left.shape == right.shape:
-        return (left, right)
-    else:
-        while left.ndim < right.ndim:
-            left = left.expand_dims(0)
+        if all(i == x for i, x in enumerate(view_permutation)):
+            return view
 
-        while right.ndim < left.ndim:
-            right = right.expand_dims(0)
+        # otherwise, construct a new tensor
+        shape = [self.shape[x] for x in permutation]
+        transpose = Tensor(shape)
 
-        shape = []
-        for l, r in zip(left.shape, right.shape):
-            if l == r:
-                shape.append(l)
-            elif l == 1:
-                shape.append(r)
-            elif r == 1:
-                shape.append(l)
-            else:
-                raise ValueError("cannot broadcast {} with {}".format(left_shape, right_shape))
+        # and construct the remaining permutation of the view
 
-        return (left.broadcast(shape), right.broadcast(shape))
+        axes = [x for i, x in enumerate(view_permutation) if x != i]
+        dims = [view.shape[x] for i, x in enumerate(view_permutation) if x != i]
+        strides = strides_for(dims)
 
+        # for each coordinate within the dimensions to transpose
+        for o in range(int(np.product(dims))):
+            coord = tuple((o // stride) % dim for dim, stride in zip(dims, strides))
 
-def product(iterable):
-    p = 1
-    for i in iterable:
-        if i:
-            p *= i
-        else:
-            return 0
+            # read a slice of the view
+            bounds = [slice(None)] * ndim
+            for x, i in zip(axes, coord):
+                bounds[x] = i
+            chunk = view[bounds]
 
-    return p
+            # write it to the output tensor
+            bounds = [bounds[x] for x in view_permutation]
+            assert chunk.shape == transpose[bounds].shape
+            transpose[bounds] = chunk
+
+        return transpose
 
 
-def validate_match(match, shape):
-    if not isinstance(match, tuple):
-        match = (match,)
+class TensorView(Tensor):
+    def __init__(self, blocks, block_map, shape):
+        assert blocks
+        assert isinstance(block_map, Block), f"invalid block map: {block_map}"
+        assert shape
 
-    assert len(match) <= len(shape)
+        self.blocks = blocks
+        self.block_map = block_map
+        self.shape = tuple(int(dim) for dim in shape)
 
-    match = list(match)
-    for axis in range(len(match)):
-        if match[axis] is None:
-            pass
-        elif isinstance(match[axis], slice):
-            match[axis] = validate_slice(match[axis], shape[axis])
-        elif isinstance(match[axis], tuple) or isinstance(match[axis], list):
-            match[axis] = validate_tuple(match[axis], shape[axis])
-        elif match[axis] < 0:
-            assert abs(match[axis]) < shape[axis]
-            match[axis] = shape[axis] + match[axis]
-        else:
-            assert match[axis] < shape[axis]
-
-    return tuple(match)
+    def __repr__(self):
+        return f"tensor view with shape {self.shape}"
 
 
-def validate_slice(s, dim):
-    if s.start is None:
-        start = 0
-    elif s.start < 0:
-        start = dim + s.start
-    else:
-        start = s.start
+def block_axis_for(shape, block_size):
+    assert shape and all(shape) and all(dim > 0 for dim in shape)
 
-    start = min(start, dim)
+    block_axis = len(shape) - 1
+    while np.product(shape[block_axis:]) < block_size:
+        block_axis -= 1
 
-    if s.stop is None:
-        stop = dim
-    elif s.stop < 0:
-        stop = dim + s.stop
-    else:
-        stop = s.stop
-
-    stop = min(stop, dim)
-
-    step = s.step if s.step else 1
-
-    return slice(start, stop, step)
-
-
-def validate_tuple(t, dim):
-    if not t:
-        raise IndexError
-
-    if not all(isinstance(t[i], int) for i in range(len(t))):
-        raise IndexError
-
-    if any([abs(t[i]) > dim for i in range(len(t))]):
-        raise IndexError
-
-    return tuple(t)
-
+    return block_axis

@@ -1,559 +1,180 @@
+import unittest
+
 import numpy as np
 
-from dense import DenseTensor
-from sparse import SparseTensor
-
-
-def test_eq():
-    dims = [3]
-    a = SparseTensor(dims)
-    b = SparseTensor(dims)
-    assert (a == b).all()
-
-    a = DenseTensor(dims)
-    b = DenseTensor(dims)
-    assert (a == b).all()
-
-    dims = [2, 1]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-    sparse[slice(1, None, 1)] = 3
-    dense[slice(1, None, 1)] = 3
-    ref[slice(1, None, 1)] = 3
-    assert (sparse == dense).all()
-    assert (sparse[0].to_nparray() == sparse.to_nparray()[0]).all()
-    assert (dense[0].to_nparray() == dense.to_nparray()[0]).all()
-
-    dims = [5, 7, 1, 12]
-    a = SparseTensor(dims)
-    b = SparseTensor(dims)
-    c = DenseTensor(dims)
-    d = DenseTensor(dims)
-
-    a[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
-    b[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
-    c[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
-    d[0, slice(1, -3, 2), :, slice(None, None, 4)] = 2
-    assert (a == b).all()
-    assert (c == d).all()
-    assert ((a == b) == (c == d)).all()
-    assert (a == c).all()
-
-
-def test_setitem():
-    dims = [3, 4]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[0, 1] = 1
-    dense[0, 1] = 1
-    ref[0, 1] = 1
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    sparse_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
-    dense_slice = sparse[slice(None, None, 2)][slice(None, -1, 3)]
-    ref_slice = ref[slice(None, None, 2)][slice(None, -1, 3)]
-    assert sparse_slice.shape == ref_slice.shape
-    assert dense_slice.shape == ref_slice.shape
-
-    sparse[slice(None, None, 2)][slice(None, None, 3)] = 1
-    dense[slice(None, None, 2)][slice(None, None, 3)] = 1
-    ref[slice(None, None, 2)][slice(None, None, 3)] = 1
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    dims = [5, 7, 3, 10]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[3, 0, 1, 9] = 1
-    dense[3, 0, 1, 9] = 1
-    ref[3, 0, 1, 9] = 1
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    zero_out = (2, 0, slice(None), slice(1, -3, 3))
-    sparse[zero_out] = 0
-    dense[zero_out] = 0
-    ref[zero_out] = 0
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    update = SparseTensor([3, 1])
-    update[2, 0] = 1
-
-    sparse[1] = update
-    dense[1] = update
-    ref[1] = update.to_nparray()
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    sparse[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
-    dense[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
-    ref[:, :, slice(1, None, 2)][slice(1, -3, 3)] = 3
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    sparse[0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    dense[0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    ref[0, slice(None, None, 2)][slice(None, None, 3)] = 4
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    sparse_slice = sparse[0]
-    dense_slice = dense[0]
-    ref_slice = ref[0]
-    assert (sparse == dense).all()
-    assert (sparse_slice.to_nparray() == ref_slice).all()
-    assert (dense_slice.to_nparray() == ref_slice).all()
-
-    sparse_slice = sparse[0, 0, :, :]
-    dense_slice = dense[0, 0, :, :]
-    ref_slice = ref[0, 0, :, :]
-    assert (sparse_slice == dense_slice).all()
-    assert (sparse_slice.to_nparray() == ref_slice).all()
-    assert (dense_slice.to_nparray() == ref_slice).all()
-    assert (sparse == dense).all()
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-
-def test_getitem():
-    dims = [3]
-    sparse = SparseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse_slice = sparse[slice(2, 3, 2)]
-    ref_slice = ref[slice(2, 3, 2)]
-    assert sparse_slice.shape == ref_slice.shape
-
-    sparse_slice = sparse[slice(1, 3)][slice(1, 2, 2)]
-    ref_slice = ref[slice(1, 3)][slice(1, 2, 2)]
-    assert sparse_slice.shape == ref_slice.shape
-
-    dims = [2, 3]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-    sparse[1, -2] = 1
-    dense[1, -2] = 1
-    ref[1, -2] = 1
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    dims = [5, 3, 1, 10]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    assert sparse[:].shape == ref[:].shape
-    assert dense[:].shape == ref[:].shape
-    assert sparse[:, :].shape == ref[:, :].shape
-    assert sparse[:, :].shape == ref[:, :].shape
-    assert sparse[:, :, 0].shape == ref[:, :, 0].shape
-    assert dense[:, :, 0].shape == ref[:, :, 0].shape
-    assert sparse[:, :, slice(1, None, 2)].shape == ref[:, :, slice(1, None, 2)].shape
-    assert dense[:, :, slice(1, None, 2)].shape == ref[:, :, slice(1, None, 2)].shape
-
-    sparse_slice = sparse[slice(2), :][slice(1, None, 2)]
-    dense_slice = dense[slice(2), :][slice(1, None, 2)]
-    ref_slice = ref[slice(2), :][slice(1, None, 2)]
-    assert sparse_slice.shape == ref_slice.shape
-    assert (sparse_slice == dense_slice).all()
-
-    for coord in [(3, 1, 0, 9), (3, -1, 0, 1)]:
-        sparse[coord] = 1
-        dense[coord] = 1
-        ref[coord] = 1
-        assert sparse[coord] == ref[coord]
-        assert dense[coord] == ref[coord]
-        assert (sparse.to_nparray() == ref).all()
-        assert (dense.to_nparray() == ref).all()
-
-    coord = (3, slice(1, 3))
-    assert (sparse[coord].to_nparray() == ref[coord]).all()
-    assert (dense[coord].to_nparray() == ref[coord]).all()
-
-def test_multiply():
-    dims = [3]
-    sparse_a = SparseTensor(dims)
-    dense_a = DenseTensor(dims)
-    ref_a = np.zeros(dims)
-    sparse_b = SparseTensor(dims)
-    dense_b = DenseTensor(dims)
-    ref_b = np.zeros(dims)
-
-    sparse_a[0] = 3
-    dense_a[0] = 3
-    ref_a[0] = 3
-    sparse_b[0] = 2
-    dense_b[0] = 2
-    ref_b[0] = 2
-
-    ref_a_b = ref_a * ref_b
-    assert ((sparse_a * sparse_b).to_nparray() == ref_a_b).all()
-    assert ((dense_a * dense_b).to_nparray() == ref_a_b).all()
-    assert ((dense_a * sparse_b).to_nparray() == ref_a_b).all()
-    assert ((sparse_a * dense_b).to_nparray() == ref_a_b).all()
-
-    dims = [2, 5]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-    sparse[0] = 1
-    dense[0] = 1
-    ref[0] = 1
-
-    assert ((sparse * 5).to_nparray() == (ref * 5)).all()
-    assert ((dense * 5).to_nparray() == (ref * 5)).all()
-
-
-def test_sum():
-    dims = [2, 3, 4, 5]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[:, slice(None, None, 2)] = 1
-    dense[:, slice(None, None, 2)] = 1
-    ref[:, slice(None, None, 2)] = 1
-    assert (sparse.sum(0).to_nparray() == ref.sum(0)).all()
-    assert (dense.sum(0).to_nparray() == ref.sum(0)).all()
-    assert (sparse.sum(2).to_nparray() == ref.sum(2)).all()
-    assert (dense.sum(2).to_nparray() == ref.sum(2)).all()
-
-    sparse_transpose = sparse.transpose()[:, 0].sum(2).expand_dims(1)
-    dense_transpose = dense.transpose()[:, 0].sum(2).expand_dims(1)
-    ref_transpose = np.expand_dims(np.transpose(ref)[:, 0].sum(2), 1)
-    assert (sparse_transpose.to_nparray() == ref_transpose).all()
-    assert (dense_transpose.to_nparray() == ref_transpose).all()
-
-    for axis in range(2):
-        sparse = sparse.sum(0)
-        dense = dense.sum(0)
-        ref = ref.sum(0)
-        assert (sparse.to_nparray() == ref).all()
-        assert (dense.to_nparray() == ref).all()
-
-    dims = [3, 5, 2, 4]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-    assert (sparse.sum(2).to_nparray() == np.sum(ref, 2)).all()
-    assert (dense.sum(2).to_nparray() == np.sum(ref, 2)).all()
-
-    sparse[:, :, 0, slice(None, None, 3)] = 2
-    dense[:, :, 0, slice(None, None, 3)] = 2
-    ref[:, :, 0, slice(None, None, 3)] = 2
-
-    for axis in range(4):
-        assert (sparse.sum(axis).to_nparray() == np.sum(ref, axis)).all()
-        assert (dense.sum(axis).to_nparray() == np.sum(ref, axis)).all()
-
-    for axis in range(3):
-        sparse = sparse.sum(0)
-        dense = dense.sum(0)
-        ref = ref.sum(0)
-        assert (sparse.to_nparray() == ref).all()
-        assert (dense.to_nparray() == ref).all()
-
-
-def test_product():
-    dims = [3, 5, 2, 4]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-    assert (sparse.product(2).to_nparray() == np.product(ref, 2)).all()
-    assert (dense.product(2).to_nparray() == np.product(ref, 2)).all()
-
-    sparse[:, :, 0, slice(None, None, 3)] = 2
-    dense[:, :, 0, slice(None, None, 3)] = 2
-    ref[:, :, 0, slice(None, None, 3)] = 2
-
-    for axis in range(4):
-        assert (sparse.product(axis).to_nparray() == np.product(ref, axis)).all()
-        assert (dense.product(axis).to_nparray() == np.product(ref, axis)).all()
-
-    sparse = sparse.transpose()[:, 0].product(1).expand_dims(1)
-    dense = dense.transpose()[:, 0].product(1).expand_dims(1)
-    ref = np.expand_dims(np.product(np.transpose(ref)[:, 0], 1), 1)
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-
-def test_expand_dims():
-    dims = [3, 1, 5, 2]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
-    dense[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
-    ref[1, slice(None), slice(1, 5, 2), (0, 1)] = 1
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-    for axis in [3, 1, 0]:
-        sparse = sparse.expand_dims(axis)
-        dense = dense.expand_dims(axis)
-        ref = np.expand_dims(ref, axis)
-        assert (sparse.to_nparray() == ref).all()
-        assert (dense.to_nparray() == ref).all()
-
-    sparse = sparse.expand_dims(sparse.ndim)
-    dense = dense.expand_dims(dense.ndim)
-    ref = np.expand_dims(ref, ref.ndim)
-    assert (sparse.to_nparray() == ref).all()
-    assert (dense.to_nparray() == ref).all()
-
-
-def test_transpose():
-    dims = [3, 2]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[slice(2), 1] = 1
-    dense[slice(2), 1] = 1
-    ref[slice(2), 1] = 1
-
-    assert (sparse.transpose().to_nparray() == ref.transpose()).all()
-    assert (sparse.transpose([0, 1]).to_nparray() == ref).all()
-    assert (sparse.transpose([1, 0]).to_nparray() == np.transpose(ref, [1, 0])).all()
-    assert (dense.transpose().to_nparray() == ref.transpose()).all()
-    assert (dense.transpose([0, 1]).to_nparray() == ref).all()
-    assert (dense.transpose([1, 0]).to_nparray() == np.transpose(ref, [1, 0])).all()
-
-    dims = [5, 1, 8, 3]
-    sparse = SparseTensor(dims)
-    dense = DenseTensor(dims)
-    ref = np.zeros(dims)
-
-    sparse[:, :, slice(None, None, 2)] = 1
-    dense[:, :, slice(None, None, 2)] = 1
-    ref[:, :, slice(None, None, 2)] = 1
-
-    assert (sparse.transpose().to_nparray() == ref.transpose()).all()
-    assert (sparse.transpose([0, 2, 1, 3]).to_nparray() == np.transpose(ref, [0, 2, 1, 3])).all()
-    assert (sparse.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
-    assert (dense.transpose().to_nparray() == ref.transpose()).all()
-    assert (dense.transpose([0, 2, 1, 3]).to_nparray() == np.transpose(ref, [0, 2, 1, 3])).all()
-    assert (dense.transpose([3, 1, 2, 0]).to_nparray() == np.transpose(ref, [3, 1, 2, 0])).all()
-
-    permutation = [3, 1, 0, 2] # shape = (3, 1, 5, 8)
-
-    sparse_slice = sparse.transpose(permutation)[:, slice(None, 4), 0]
-    dense_slice = dense.transpose(permutation)[:, slice(None, 4), 0]
-    ref_slice = ref.transpose(permutation)[:, slice(None, 4), 0]
-
-    assert sparse_slice.shape == ref_slice.shape
-    assert dense_slice.shape == ref_slice.shape
-
-    assert (sparse_slice.to_nparray() == ref_slice).all()
-    assert (dense_slice.to_nparray() == ref_slice).all()
-
-
-def test_broadcast():
-    a1 = SparseTensor([2, 1, 3])
-    b1 = SparseTensor([2, 3, 1])
-    assert (a1.broadcast(b1.shape) == b1.broadcast(a1.shape)).all()
-
-    a2 = DenseTensor([2, 1, 3])
-    b2 = DenseTensor([2, 3, 1])
-    assert (a2.broadcast(b2.shape) == b2.broadcast(a2.shape)).all()
-    assert (a1.broadcast(b2.shape) == b2.broadcast(a1.shape)).all()
-    assert (a2.broadcast(b1.shape) == b2.broadcast(a1.shape)).all()
-    assert (a1.broadcast(b2.shape) == b1.broadcast(a2.shape)).all()
-
-    ref_a = np.zeros([2, 1, 3])
-    a1[0] = 2
-    a2[0] = 2
-    ref_a[0] = 2
-
-    ref_b = np.zeros([2, 3, 1])
-    b1[0] = 3
-    b2[0] = 3
-    ref_b[0] = 3
-
-    a1_b1 = a1 * b1
-    a2_b1 = a2 * b1
-    a1_b2 = a1 * b2
-    a2_b2 = a2 * b2
-    ref_a_b = ref_a * ref_b
-    assert a1_b1.shape == ref_a_b.shape
-    assert a1_b2.shape == ref_a_b.shape
-    assert a2_b1.shape == ref_a_b.shape
-    assert a2_b2.shape == ref_a_b.shape
-
-    assert (a1_b1.to_nparray() == ref_a_b).all()
-    assert (a1_b2.to_nparray() == ref_a_b).all()
-    assert (a2_b1.to_nparray() == ref_a_b).all()
-    assert (a2_b2.to_nparray() == ref_a_b).all()
-
-    a = SparseTensor([4, 2])
-    ref_a = np.zeros([4, 2])
-
-    a = a.broadcast([1, 4, 1])
-    ref_a = np.logical_and(ref_a, np.ones([1, 4, 1]))
-    assert a.shape == ref_a.shape
-
-    a = SparseTensor([4, 2], np.bool)
-    ref_a = np.zeros([4, 2], np.bool)
-
-    a[2] = True
-    ref_a[2] = True
-    assert (a.broadcast([1, 4, 1]).to_nparray() == np.logical_and(ref_a, np.ones([1, 4, 1]))).all()
-
-    a = SparseTensor([4, 1, 1])
-    b = DenseTensor([4, 1, 1])
-    ref = np.zeros([4, 1, 1])
-
-    a = a.broadcast([4, 4, 1])
-    b = b.broadcast([4, 4, 1])
-    ref = np.logical_and(ref, np.ones([4, 4, 1]))
-    assert a[2].shape == b[2].shape
-    assert a[2].shape == ref[2].shape
-    assert b[2].shape == ref[2].shape
-
-def test_and():
-    left = SparseTensor([2], np.bool)
-    right = SparseTensor([2], np.bool)
-
-    assert ((left & right).to_nparray() == np.array([False, False])).all()
-
-    left[0] = True
-    assert((left & right).to_nparray() == np.array([False, False])).all()
-
-    right[1] = True
-    assert((left & right).to_nparray() == np.array([False, False])).all()
-
-    left[1] = True
-    assert((left & right).to_nparray() == np.array([False, True])).all()
-
-    left = SparseTensor([4, 2])
-    left_ref = np.zeros([4, 2])
-    right = SparseTensor([4, 1, 1], np.bool)
-    right_ref = np.zeros([4, 1, 1], np.bool)
-
-    left[slice(1, 3, 2)] = 2
-    left[0, 1] = 1
-    left_ref[slice(1, 3, 2)] = 2
-    left_ref[0, 1] = 1
-
-    actual = (left & right)
-    expected = np.logical_and(left_ref, right_ref)
-
-    assert (actual.to_nparray() == expected).all()
-
-    right[2] = True
-    right_ref[2] = True
-
-    actual = (left & right)
-    expected = np.logical_and(left_ref, right_ref)
-
-    assert (actual.to_nparray() == expected).all()
-
-
-def test_or():
-    left = SparseTensor([2], np.bool)
-    right = SparseTensor([2], np.bool)
-
-    assert ((left | right).to_nparray() == np.array([False, False])).all()
-
-    left[0] = True
-    assert((left | right).to_nparray() == np.array([True, False])).all()
-
-    right[1] = True
-    assert((left | right).to_nparray() == np.array([True, True])).all()
-
-    left = SparseTensor([4, 2])
-    left_ref = np.zeros([4, 2])
-    right = SparseTensor([4, 1, 1], np.bool)
-    right_ref = np.zeros([4, 1, 1], np.bool)
-
-    left[slice(1, 3, 2)] = 2
-    left[0, 1] = 1
-    left_ref[slice(1, 3, 2)] = 2
-    left_ref[0, 1] = 1
-
-    right[2] = True
-    right_ref[2] = True
-
-    actual = (left | right)
-    expected = np.logical_or(left_ref, right_ref)
-
-    assert((actual.to_nparray() == expected).all())
-
-
-def test_add():
-    left = SparseTensor([2])
-    right = SparseTensor([2])
-    left[0] = 1
-
-    assert ((left + right).to_nparray() == np.array([1, 0])).all()
-
-    left = SparseTensor([2, 3])
-    left_ref = np.zeros([2, 3])
-    right = SparseTensor([3])
-    right_ref = np.zeros([3])
-    left[slice(None), 1] = 3
-    left_ref[slice(None), 1] = 3    
-    right[2] = 5
-    right_ref[2] = 5
-
-    assert ((left + right).to_nparray() == (left_ref + right_ref)).all()
-
-def test_graph_traversal():
-    edges = SparseTensor([5, 5], np.bool)
-    edges[2, 3] = True
-
-    adjacent = SparseTensor([5])
-    adjacent[2] = True
-
-    visited = SparseTensor([5])
-
-    visited = visited | adjacent
-    adjacent = (edges.transpose() * adjacent).sum(1)
-    adjacent.mask(visited)
-    assert (adjacent.to_nparray() == np.array([0, 0, 0, 1, 0], np.bool)).all()
-
-    visited = visited | adjacent
-    adjacent = (edges.transpose() * adjacent).sum(1)
-    adjacent.mask(visited)
-    assert (adjacent.to_nparray() == np.zeros(5, np.bool)).all()
-
-
-def test_identity():
-    eye = SparseTensor.identity(5)
-    ref = np.identity(5)
-    assert (eye.to_nparray() == ref).all()
-    assert (eye[1, slice(0, None, 2)].to_nparray() == ref[1, slice(0, None, 2)]).all()
+from tensor import Block, Buffer, Tensor
+
+
+class BufferTests(unittest.TestCase):
+    def testAdd(self):
+        x = Buffer(3, [1, 2, 3])
+        y = Buffer(3, [4, 5, 6])
+        self.assertTrue(all(x + y == Buffer(3, [5, 7, 9])))
+
+
+class BlockTests(unittest.TestCase):
+    def testConcat(self):
+        x_np = np.arange(24).reshape((2, 3, 4))
+        y_np = np.arange(16).reshape((2, 2, 4))
+
+        x_tc = Block((2, 3, 4), (int(n) for n in x_np.flatten()))
+        y_tc = Block((2, 2, 4), (int(n) for n in y_np.flatten()))
+
+        expected = np.concatenate([x_np, y_np], 1)
+        actual = Block.concatenate([x_tc, y_tc], 1)
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testMatMul(self):
+        a_np = np.arange(6).reshape((2, 3))
+        a_tc = Block((2, 3), range(6))
+        b_np = np.arange(12).reshape((3, 4))
+        b_tc = Block((3, 4), range(12))
+
+        expected = a_np @ b_np
+        actual = a_tc @ b_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testMatMulBatch(self):
+        a_np = np.arange(18).reshape((3, 2, 3))
+        a_tc = Block((3, 2, 3), range(18))
+        b_np = np.arange(36).reshape((3, 3, 4))
+        b_tc = Block((3, 3, 4), range(36))
+
+        expected = a_np @ b_np
+        actual = a_tc @ b_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testMul(self):
+        x_np = np.arange(12).reshape((3, 1, 4))
+        x_tc = Block((3, 1, 4), range(12))
+
+        y_np = np.arange(4).reshape(4)
+        y_tc = Block((4,), range(4))
+
+        expected = x_np * y_np
+        actual = x_tc * y_tc
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testSlice(self):
+        shape = [2, 3, 4, 5, 6]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np[1, :, 1:, :-2]
+        actual = x_tc[1, :, 1:, :-2]
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testSum(self):
+        shape = [2, 3, 4, 5, 6]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.sum(3).sum(1)
+        actual = x_tc.reduce_sum([1, 3])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose(self):
+        shape = [2, 3, 4]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Block(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([1, 2, 0])
+        actual = x_tc.transpose([1, 2, 0])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+
+class TensorTests(unittest.TestCase):
+    def testAdd(self):
+        shape = (1, 3, 5, 9)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+        y_np = np.array([n for n in reversed(range(size))]).reshape(shape)
+        y_tc = Tensor(shape, reversed(range(size)))
+
+        expected = x_np + y_np
+        actual = x_tc + y_tc
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testMul(self):
+        x_np = np.array([0, 1]).reshape((2, 1))
+        x_tc = Tensor((2, 1), [0, 1])
+
+        y_np = np.array([5, 4]).reshape((2,))
+        y_tc = Tensor((2,), [5, 4])
+
+        expected = x_np * y_np
+        actual = x_tc * y_tc
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testSlice_even(self):
+        shape = (3, 2, 4, 5)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+
+        expected = x_np[0, :, :2]
+        actual = x_tc[0, :, :2]
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testSlice_odd(self):
+        shape = (101,)
+        size = int(np.product(shape))
+
+        x_np = np.arange(size).reshape(shape)
+        x_tc = Tensor(shape, range(size))
+
+        expected = x_np[:51]
+        actual = x_tc[:51]
+
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose_last_axis(self):
+        shape = [5, 3, 4]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Tensor(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([0, 2, 1])
+        actual = x_tc.transpose([0, 2, 1])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
+
+    def testTranspose_all_axes(self):
+        shape = [4, 6, 3, 5]
+
+        x_np = np.arange(np.product(shape)).reshape(shape)
+        x_tc = Tensor(shape, [int(n) for n in x_np.flatten()])
+
+        expected = x_np.transpose([3, 1, 0, 2])
+        actual = x_tc.transpose([3, 1, 0, 2])
+
+        self.assertEqual(expected.shape, actual.shape)
+        self.assertTrue(all(e == a for e, a in zip(expected.flatten(), actual)))
 
 
 if __name__ == "__main__":
-    test_eq()
-    test_setitem()
-    test_getitem()
-    test_broadcast()
-    test_multiply()
-    test_sum()
-    test_product()
-    test_expand_dims()
-    test_and()
-    test_or()
-    test_add()
-    test_graph_traversal()
-    test_identity()
-    print("PASS")
-
+    unittest.main()
