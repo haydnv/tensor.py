@@ -85,6 +85,9 @@ class Tensor(object):
         assert this.shape == that.shape
         return Tensor(this.shape, (lb == rb for lb, rb in zip(this, that)))
 
+    def __repr__(self):
+        return f"tensor with shape {self.shape}"
+
     def __sub__(self, other):
         this, that = broadcast(self, other)
         assert this.shape == that.shape
@@ -127,6 +130,7 @@ class Tensor(object):
 
         block_map_bounds.append(bound)
         block_map = self.block_map[block_map_bounds]
+        assert block_map
 
         global_bound = bounds[block_axis]
         if isinstance(global_bound, slice):
@@ -136,9 +140,13 @@ class Tensor(object):
             if len(block_map) == 1:
                 local_bounds = [global_bound]
             else:
-                local_bounds = [slice(global_bound.start % stride, None, global_bound.step)]
+                start = global_bound.start % stride
+                stop = global_bound.stop % stride
+                stop = stop if stop else stride
+
+                local_bounds = [slice(start, None, global_bound.step)]
                 local_bounds += [slice(None, None, global_bound.step)] * (len(block_map) - 2)
-                local_bounds += [slice(None, global_bound.stop % stride, global_bound.step)]
+                local_bounds += [slice(None, stop, global_bound.step)]
         else:
             # a single coordinate on the block axis should mean there is a single block selected
             assert len(block_map) == 1
@@ -151,7 +159,7 @@ class Tensor(object):
             block_bounds[0] = bound
             blocks.append(block[block_bounds])
 
-        return TensorView(blocks, block_map, shape)
+        return TensorView(blocks, Block(block_map.shape, range(len(block_map))), shape)
 
     def __iter__(self):
         for i in self.block_map:
@@ -165,14 +173,14 @@ class Tensor(object):
         key = tuple(key)
         ndim = len(self.shape)
         block_axis = block_axis_for(self.shape, len(self.blocks[0]))
+        block_shape = self.blocks[0].shape
 
         if len(key) == ndim and all(isinstance(i, int) for i in key):
-            coord = [i if i >= 0 else self.shape[x] + i for x, i in enumerate(key)]
-            map_coord = coord[:block_axis]
-            map_coord.append(coord[block_axis] // self.block_map.shape[-1])
-            block_coord = coord[block_axis:]
-            block_coord[0] = block_coord[0] // map_coord[-1]
-            block = self.block_map[map_coord]
+            map_coord = list(key[:block_axis])
+            map_coord.append(key[block_axis] // block_shape[0])
+            block = self.blocks[self.block_map[map_coord]]
+            block_coord = list(key[block_axis:])
+            block_coord[0] = key[block_axis] % block_shape[0]
             block[block_coord] = value
             return
 
@@ -195,7 +203,7 @@ class Tensor(object):
             self[coord] = n
 
     def broadcast(self, shape):
-        if self.shape == shape:
+        if self.shape == tuple(shape):
             return self
 
         # characterize the source tensor (this tensor)
@@ -208,7 +216,7 @@ class Tensor(object):
         map_shape = shape[:offset + block_axis]
 
         block_map = self.block_map.broadcast(map_shape) if map_shape else self.block_map
-        blocks = [self.blocks[i].broadcast(block_shape) for i in block_map]
+        blocks = [self.blocks[i].broadcast(block_shape) for i in self.block_map]
 
         return TensorView(blocks, block_map, shape)
 
@@ -272,8 +280,15 @@ class Tensor(object):
             coord = tuple((o // stride) % dim for dim, stride in zip(dims, strides))
 
             # read a slice of the view
-            # transpose the slice
+            bounds = [slice(None)] * ndim
+            for x, i in zip(axes, coord):
+                bounds[x] = i
+            chunk = view[bounds]
+
             # write it to the output tensor
+            bounds = [bounds[x] for x in view_permutation]
+            assert chunk.shape == transpose[bounds].shape
+            transpose[bounds] = chunk
 
         return transpose
 
@@ -287,6 +302,9 @@ class TensorView(Tensor):
         self.blocks = blocks
         self.block_map = block_map
         self.shape = tuple(int(dim) for dim in shape)
+
+    def __repr__(self):
+        return f"tensor view with shape {self.shape}"
 
 
 def block_axis_for(shape, block_size):
